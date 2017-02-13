@@ -18,6 +18,19 @@
     follow detected vehicles.
   - Estimate a bounding box for vehicles detected.
 
+* Setup
+
+  #+BEGIN_SRC sh :results output :tangle no :exports code
+  conda create --name CarND-Vehicle-Detection --clone CarND-Advanced-Lane-Lines
+  source activate CarND-Vehicle-Detection
+  conda env export > environment.yml
+  #+END_SRC
+
+  #+BEGIN_SRC sh :results output :tangle no :exports code
+  conda env create --file environment.yml --name CarND-Vehicle-Detection
+  source activate CarND-Vehicle-Detection
+  #+END_SRC
+
 * Histogram of Oriented Gradients (HOG)
 * Sliding Window Search
 * Video Implementation
