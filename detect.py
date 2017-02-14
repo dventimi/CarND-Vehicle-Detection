@@ -185,6 +185,15 @@ plot_hsv3d(cv2.imread("3.png"))
 # 15. Spatial Binning of Color
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/404dfd70-937b-468f-a3df-5fb88cc2f765
 
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+# Read in an image
+# You can also read cutout2, 3, 4 etc. to see other examples
+image = mpimg.imread('cutout1.jpg')
+
 # Define a function to compute color histogram features  
 # Pass the color_space flag as 3-letter all caps string
 # like 'HSV' or 'LUV' etc.
@@ -206,6 +215,13 @@ def bin_spatial(img, color_space='RGB', size=(32, 32)):
     features = cv2.resize(feature_image, size).ravel() 
     # Return the feature vector
     return features
+
+
+feature_vec = bin_spatial(image, color_space='RGB', size=(32, 32))
+
+# Plot features
+plt.plot(feature_vec)
+plt.title('Spatially Binned Features')
 
 
 # 18. Data Exploration
