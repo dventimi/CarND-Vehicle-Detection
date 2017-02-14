@@ -1,6 +1,13 @@
 # 5. Manual Vehicle Detection
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/b725c710-83fb-49a6-a6dd-e48c4b14a1ba
 
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
+image = mpimg.imread('bbox-example-image.jpg')
+
 # Define a function that takes an image, a list of bounding boxes, 
 # and optional color tuple and line thickness as inputs
 # then draws boxes in that color on the output
@@ -19,6 +26,8 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
 bboxes = [((275, 572), (380, 510)), ((488, 563), (549, 518)), ((554, 543), (582, 522)), 
           ((601, 555), (646, 522)), ((657, 545), (685, 517)), ((849, 678), (1135, 512))]
 
+result = draw_boxes(image, bboxes)
+plt.imshow(result)
 
 # 9. Template Matching
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/9acf11c2-a5a9-4e5a-ba86-1e92246fff99
