@@ -291,6 +291,13 @@ plt.title('Example Not-car Image')
 # 19. scikit-image HOG
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/d479f43a-7bbb-4de7-9452-f6b991ece599
 
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+import glob
+from skimage.feature import hog
+
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
     if vis == True:
@@ -303,6 +310,32 @@ def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, featu
                        cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, 
                        visualise=False, feature_vector=feature_vec)
         return features
+
+
+# Generate a random index to look at a car image
+ind = np.random.randint(0, len(cars))
+# Read in the image
+image = mpimg.imread(cars[ind])
+gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+# Define HOG parameters
+orient = 9
+pix_per_cell = 8
+cell_per_block = 2
+# Call our function with vis=True to see an image output
+features, hog_image = get_hog_features(gray, orient, 
+                        pix_per_cell, cell_per_block, 
+                        vis=True, feature_vec=False)
+
+
+# Plot the examples
+fig = plt.figure()
+plt.subplot(121)
+plt.imshow(image, cmap='gray')
+plt.title('Example Car Image')
+plt.subplot(122)
+plt.imshow(hog_image, cmap='gray')
+plt.title('HOG Visualization')
+
 
 
 # 21. Combine and Normalize Features
