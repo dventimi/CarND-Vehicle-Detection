@@ -32,6 +32,11 @@ plt.imshow(result)
 # 9. Template Matching
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/9acf11c2-a5a9-4e5a-ba86-1e92246fff99
 
+import numpy as np
+import cv2
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
+
 # Define a function to search for template matches
 # and return a list of bounding boxes
 def find_matches(img, template_list):
@@ -61,6 +66,16 @@ def find_matches(img, template_list):
         # Return the list of bounding boxes
         
     return bbox_list
+
+
+image = mpimg.imread('bbox-example-image.jpg')
+#image = mpimg.imread('temp-matching-example-2.jpg')
+templist = ['cutout1.jpg', 'cutout2.jpg', 'cutout3.jpg',
+            'cutout4.jpg', 'cutout5.jpg', 'cutout6.jpg']
+
+bboxes = find_matches(image, templist)
+result = draw_boxes(image, bboxes)
+plt.imshow(result)
 
 
 # 12. Histograms of Color
