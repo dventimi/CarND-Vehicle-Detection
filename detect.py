@@ -227,6 +227,25 @@ plt.title('Spatially Binned Features')
 # 18. Data Exploration
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/8c5ca570-3888-459b-9189-94cbfb8ef02c
 
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+import cv2
+import glob
+#from skimage.feature import hog
+#from skimage import color, exposure
+# images are divided up into vehicles and non-vehicles
+
+images = glob.glob('vehicles_smallset/**/*.jpeg') + glob.glob('non-vehicles_smallset/**/*.jpeg')
+cars = []
+notcars = []
+
+for image in images:
+    if 'image' in image or 'extra' in image:
+        notcars.append(image)
+    else:
+        cars.append(image)
+
 # Define a function to return some characteristics of the dataset 
 def data_look(car_list, notcar_list):
     data_dict = {}
@@ -242,6 +261,31 @@ def data_look(car_list, notcar_list):
     data_dict["data_type"] = example_img.dtype
     # Return data_dict
     return data_dict
+
+
+data_info = data_look(cars, notcars)
+
+print('Your function returned a count of', 
+      data_info["n_cars"], ' cars and', 
+      data_info["n_notcars"], ' non-cars')
+print('of size: ',data_info["image_shape"], ' and data type:', 
+      data_info["data_type"])
+# Just for fun choose random car / not-car indices and plot example images   
+car_ind = np.random.randint(0, len(cars))
+notcar_ind = np.random.randint(0, len(notcars))
+    
+# Read in car / not-car images
+car_image = mpimg.imread(cars[car_ind])
+notcar_image = mpimg.imread(notcars[notcar_ind])
+
+# Plot the examples
+fig = plt.figure()
+plt.subplot(121)
+plt.imshow(car_image)
+plt.title('Example Car Image')
+plt.subplot(122)
+plt.imshow(notcar_image)
+plt.title('Example Not-car Image')
 
 
 # 19. scikit-image HOG
