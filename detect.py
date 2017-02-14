@@ -124,6 +124,64 @@ else:
     print('Your function is returning None for at least one variable...')
 
 
+# 14. Explore Color Spaces
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+def plot3d(pixels, colors_rgb,
+        axis_labels=list("RGB"), axis_limits=[(0, 255), (0, 255), (0, 255)]):
+    """Plot pixels in 3D."""
+    # Create figure and 3D axes
+    fig = plt.figure(figsize=(8, 8))
+    ax = Axes3D(fig)
+    # Set axis limits
+    ax.set_xlim(*axis_limits[0])
+    ax.set_ylim(*axis_limits[1])
+    ax.set_zlim(*axis_limits[2])
+    # Set axis labels and sizes
+    ax.tick_params(axis='both', which='major', labelsize=14, pad=8)
+    ax.set_xlabel(axis_labels[0], fontsize=16, labelpad=16)
+    ax.set_ylabel(axis_labels[1], fontsize=16, labelpad=16)
+    ax.set_zlabel(axis_labels[2], fontsize=16, labelpad=16)
+    # Plot pixel values with colors given in colors_rgb
+    ax.scatter(
+        pixels[:, :, 0].ravel(),
+        pixels[:, :, 1].ravel(),
+        pixels[:, :, 2].ravel(),
+        c=colors_rgb.reshape((-1, 3)), edgecolors='none')
+    return ax  # return Axes3D object for further manipulation
+
+
+def plot_hsv3d(img):
+    # Select a small fraction of pixels to plot by subsampling it
+    scale = max(img.shape[0], img.shape[1], 64) / 64  # at most 64 rows and columns
+    img_small = cv2.resize(img, (np.int(img.shape[1] / scale), np.int(img.shape[0] / scale)), interpolation=cv2.INTER_NEAREST)
+    # Convert subsampled image to desired color space(s)
+    img_small_RGB = cv2.cvtColor(img_small, cv2.COLOR_BGR2RGB)  # OpenCV uses BGR, matplotlib likes RGB
+    img_small_HSV = cv2.cvtColor(img_small, cv2.COLOR_BGR2HSV)
+    img_small_rgb = img_small_RGB / 255.  # scaled to [0, 1], only for plotting
+    # Plot and show
+    plot3d(img_small_HSV, img_small_rgb, axis_labels=list("HSV"))
+
+
+plot_hsv3d(cv2.imread("000275.png"))
+
+plot_hsv3d(cv2.imread("25.png")) 
+
+plot_hsv3d(cv2.imread("31.png")) 
+
+plot_hsv3d(cv2.imread("53.png")) 
+
+plot_hsv3d(cv2.imread("8.png")) 
+
+plot_hsv3d(cv2.imread("2.png")) 
+
+plot_hsv3d(cv2.imread("3.png")) 
+
+
 # 15. Spatial Binning of Color
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/404dfd70-937b-468f-a3df-5fb88cc2f765
 
