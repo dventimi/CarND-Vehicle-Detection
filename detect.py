@@ -445,12 +445,12 @@ from sklearn.preprocessing import StandardScaler
 # from sklearn.model_selection import train_test_split
 from sklearn.cross_validation import train_test_split
 
-# # Define a function to compute binned color features  
-# def bin_spatial(img, size=(32, 32)):
-#     # Use cv2.resize().ravel() to create the feature vector
-#     features = cv2.resize(img, size).ravel() 
-#     # Return the feature vector
-#     return features
+# Define a function to compute binned color features  
+def bin_spatial(img, size=(32, 32)):
+    # Use cv2.resize().ravel() to create the feature vector
+    features = cv2.resize(img, size).ravel() 
+    # Return the feature vector
+    return features
 
 # Define a function to compute color histogram features  
 def color_hist(img, nbins=32, bins_range=(0, 256)):
@@ -495,7 +495,7 @@ def extract_features(imgs, cspace='RGB', spatial_size=(32, 32),
 
 
 # Read in car and non-car images
-images = glob.glob('*.jpeg')
+images = glob.glob('vehicles_smallset/**/*.jpeg') + glob.glob('non-vehicles_smallset/**/*.jpeg')
 cars = []
 notcars = []
 for image in images:
@@ -626,7 +626,7 @@ def extract_features(imgs, cspace='RGB', orient=9,
 
 
 # Divide up into cars and notcars
-images = glob.glob('*.jpeg')
+images = glob.glob('vehicles_smallset/**/*.jpeg') + glob.glob('non-vehicles_smallset/**/*.jpeg')
 cars = []
 notcars = []
 for image in images:
