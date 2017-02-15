@@ -1,17 +1,35 @@
+# ################################################################################
+# Imports
+# ################################################################################
+
+from itertools import groupby, islice, zip_longest, cycle, filterfalse
+from lesson_functions import *
+from moviepy.editor import VideoFileClip
+from mpl_toolkits.mplot3d import Axes3D
+from skimage import color, exposure
+from skimage.feature import hog
+from sklearn.cross_validation import train_test_split
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import LinearSVC
+import cv2
+import glob
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+import pickle
+import time
+
+# ################################################################################
 # 5. Manual Vehicle Detection
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/b725c710-83fb-49a6-a6dd-e48c4b14a1ba
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# ################################################################################
 
 image = mpimg.imread('bbox-example-image.jpg')
 
 # Define a function that takes an image, a list of bounding boxes, 
 # and optional color tuple and line thickness as inputs
 # then draws boxes in that color on the output
-
 def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Make a copy of the image
     draw_img = np.copy(img)
@@ -22,20 +40,17 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return draw_img
 
+
 # Here are the bounding boxes I used
 bboxes = [((275, 572), (380, 510)), ((488, 563), (549, 518)), ((554, 543), (582, 522)), 
           ((601, 555), (646, 522)), ((657, 545), (685, 517)), ((849, 678), (1135, 512))]
-
 result = draw_boxes(image, bboxes)
 plt.imshow(result)
 
+# ################################################################################
 # 9. Template Matching
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/9acf11c2-a5a9-4e5a-ba86-1e92246fff99
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# ################################################################################
 
 # Define a function to search for template matches
 # and return a list of bounding boxes
@@ -64,7 +79,6 @@ def find_matches(img, template_list):
         # Append bbox position to list
         bbox_list.append((top_left, bottom_right))
         # Return the list of bounding boxes
-        
     return bbox_list
 
 
@@ -72,18 +86,14 @@ image = mpimg.imread('bbox-example-image.jpg')
 #image = mpimg.imread('temp-matching-example-2.jpg')
 templist = ['cutout1.jpg', 'cutout2.jpg', 'cutout3.jpg',
             'cutout4.jpg', 'cutout5.jpg', 'cutout6.jpg']
-
 bboxes = find_matches(image, templist)
 result = draw_boxes(image, bboxes)
 plt.imshow(result)
 
+# ################################################################################
 # 12. Histograms of Color
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/4f0692c6-e22d-4f28-b5d0-7990a4d8de86
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# ################################################################################
 
 image = mpimg.imread('cutout1.jpg')
 
@@ -100,7 +110,7 @@ def color_hist(img, nbins=32, bins_range=(0, 256)):
     hist_features = np.concatenate((rhist[0], ghist[0], bhist[0]))
     # Return the individual histograms, bin_centers and feature vector
     return rhist, ghist, bhist, bin_centers, hist_features
-    
+
 
 rh, gh, bh, bincen, feature_vec = color_hist(image, nbins=32, bins_range=(0, 256))
 
@@ -124,12 +134,9 @@ else:
     print('Your function is returning None for at least one variable...')
 
 
+# ################################################################################
 # 14. Explore Color Spaces
-
-import cv2
-import numpy as np
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+# ################################################################################
 
 def plot3d(pixels, colors_rgb,
         axis_labels=list("RGB"), axis_limits=[(0, 255), (0, 255), (0, 255)]):
@@ -168,27 +175,17 @@ def plot_hsv3d(img):
 
 
 plot_hsv3d(cv2.imread("000275.png"))
-
 plot_hsv3d(cv2.imread("25.png")) 
-
 plot_hsv3d(cv2.imread("31.png")) 
-
 plot_hsv3d(cv2.imread("53.png")) 
-
 plot_hsv3d(cv2.imread("8.png")) 
-
 plot_hsv3d(cv2.imread("2.png")) 
-
 plot_hsv3d(cv2.imread("3.png")) 
 
-
+# ################################################################################
 # 15. Spatial Binning of Color
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/404dfd70-937b-468f-a3df-5fb88cc2f765
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# ################################################################################
 
 # Read in an image
 # You can also read cutout2, 3, 4 etc. to see other examples
@@ -223,18 +220,10 @@ feature_vec = bin_spatial(image, color_space='RGB', size=(32, 32))
 plt.plot(feature_vec)
 plt.title('Spatially Binned Features')
 
-
+# ################################################################################
 # 18. Data Exploration
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/8c5ca570-3888-459b-9189-94cbfb8ef02c
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-#from skimage.feature import hog
-#from skimage import color, exposure
-# images are divided up into vehicles and non-vehicles
+# ################################################################################
 
 images = glob.glob('vehicles_smallset/**/*.jpeg') + glob.glob('non-vehicles_smallset/**/*.jpeg')
 cars = []
@@ -264,7 +253,6 @@ def data_look(car_list, notcar_list):
 
 
 data_info = data_look(cars, notcars)
-
 print('Your function returned a count of', 
       data_info["n_cars"], ' cars and', 
       data_info["n_notcars"], ' non-cars')
@@ -287,28 +275,30 @@ plt.subplot(122)
 plt.imshow(notcar_image)
 plt.title('Example Not-car Image')
 
-
+# ################################################################################
 # 19. scikit-image HOG
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/d479f43a-7bbb-4de7-9452-f6b991ece599
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-from skimage.feature import hog
+# ################################################################################
 
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, vis=False, feature_vec=True):
     if vis == True:
-        features, hog_image = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
-                                  cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, 
-                                  visualise=True, feature_vector=False)
+        features, hog_image = hog(img,
+                                  orientations=orient,
+                                  pixels_per_cell=(pix_per_cell, pix_per_cell),
+                                  cells_per_block=(cell_per_block, cell_per_block),
+                                  transform_sqrt=False, 
+                                  visualise=True,
+                                  feature_vector=False)
         return features, hog_image
     else:      
-        features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
-                       cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=False, 
-                       visualise=False, feature_vector=feature_vec)
+        features = hog(img,
+                       orientations=orient,
+                       pixels_per_cell=(pix_per_cell, pix_per_cell),
+                       cells_per_block=(cell_per_block, cell_per_block),
+                       transform_sqrt=False, 
+                       visualise=False,
+                       feature_vector=feature_vec)
         return features
 
 
@@ -325,8 +315,6 @@ cell_per_block = 2
 features, hog_image = get_hog_features(gray, orient, 
                         pix_per_cell, cell_per_block, 
                         vis=True, feature_vec=False)
-
-
 # Plot the examples
 fig = plt.figure()
 plt.subplot(121)
@@ -336,17 +324,10 @@ plt.subplot(122)
 plt.imshow(hog_image, cmap='gray')
 plt.title('HOG Visualization')
 
-
-
+# ################################################################################
 # 21. Combine and Normalize Features
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/cacf86d7-f8eb-46bd-9f09-34a2ff208ce8
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from sklearn.preprocessing import StandardScaler
-import glob
+# ################################################################################
 
 # Define a function to compute binned color features  
 def bin_spatial(img, size=(32, 32)):
@@ -403,10 +384,9 @@ car_features = extract_features(cars, cspace='RGB', spatial_size=(32, 32),
                                 hist_bins=32, hist_range=(0, 256))
 notcar_features = extract_features(notcars, cspace='RGB', spatial_size=(32, 32),
                                    hist_bins=32, hist_range=(0, 256))
-
 if len(car_features) > 0:
     # Create an array stack of feature vectors
-    X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
+    X = np.vstack((car_features, notcar_features)).astype(np.float64)
     # Fit a per-column scaler
     X_scaler = StandardScaler().fit(X)
     # Apply the scaler to X
@@ -427,23 +407,10 @@ if len(car_features) > 0:
 else: 
     print('Your function only returns empty feature vectors...')
 
-
+# ################################################################################
 # 26. Color Classify
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/be308636-742b-416a-8fcc-c6071865a11f
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-import time
-from sklearn.svm import LinearSVC
-from sklearn.preprocessing import StandardScaler
-# NOTE: the next import is only valid 
-# for scikit-learn version <= 0.17
-# if you are using scikit-learn >= 0.18 then use this:
-# from sklearn.model_selection import train_test_split
-from sklearn.cross_validation import train_test_split
+# ################################################################################
 
 # Define a function to compute binned color features  
 def bin_spatial(img, size=(32, 32)):
@@ -451,6 +418,7 @@ def bin_spatial(img, size=(32, 32)):
     features = cv2.resize(img, size).ravel() 
     # Return the feature vector
     return features
+
 
 # Define a function to compute color histogram features  
 def color_hist(img, nbins=32, bins_range=(0, 256)):
@@ -462,6 +430,7 @@ def color_hist(img, nbins=32, bins_range=(0, 256)):
     hist_features = np.concatenate((channel1_hist[0], channel2_hist[0], channel3_hist[0]))
     # Return the individual histograms, bin_centers and feature vector
     return hist_features
+
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
@@ -503,33 +472,26 @@ for image in images:
         notcars.append(image)
     else:
         cars.append(image)
-
 # TODO play with these values to see how your classifier
 # performs under different binning scenarios
 spatial = 32
 histbin = 32
-
 car_features = extract_features(cars, cspace='RGB', spatial_size=(spatial, spatial),
                         hist_bins=histbin, hist_range=(0, 256))
 notcar_features = extract_features(notcars, cspace='RGB', spatial_size=(spatial, spatial),
                         hist_bins=histbin, hist_range=(0, 256))
-
 # Create an array stack of feature vectors
 X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
 # Fit a per-column scaler
 X_scaler = StandardScaler().fit(X)
 # Apply the scaler to X
 scaled_X = X_scaler.transform(X)
-
 # Define the labels vector
 y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-
-
 # Split up data into randomized training and test sets
 rand_state = np.random.randint(0, 100)
 X_train, X_test, y_train, y_test = train_test_split(
     scaled_X, y, test_size=0.2, random_state=rand_state)
-
 print('Using spatial binning of:',spatial,
     'and', histbin,'histogram bins')
 print('Feature vector length:', len(X_train[0]))
@@ -550,44 +512,40 @@ print('For these',n_predict, 'labels: ', y_test[0:n_predict])
 t2 = time.time()
 print(round(t2-t, 5), 'Seconds to predict', n_predict,'labels with SVC')
 
-
+# ################################################################################
 # 27. HOG Classify
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/7355e459-55d0-4f2d-923c-4810c4360267
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-import time
-from sklearn.svm import LinearSVC
-from sklearn.preprocessing import StandardScaler
-from skimage.feature import hog
-# NOTE: the next import is only valid for scikit-learn version <= 0.17
-# for scikit-learn >= 0.18 use:
-# from sklearn.model_selection import train_test_split
-from sklearn.cross_validation import train_test_split
+# ################################################################################
 
 # Define a function to return HOG features and visualization
 def get_hog_features(img, orient, pix_per_cell, cell_per_block, 
-                        vis=False, feature_vec=True):
+                     vis=False, feature_vec=True):
     # Call with two outputs if vis==True
     if vis == True:
-        features, hog_image = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
-                                  cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=True, 
-                                  visualise=vis, feature_vector=feature_vec)
+        features, hog_image = hog(img,
+                                  orientations=orient,
+                                  pixels_per_cell=(pix_per_cell, pix_per_cell),
+                                  cells_per_block=(cell_per_block, cell_per_block),
+                                  transform_sqrt=True, 
+                                  visualise=vis,
+                                  feature_vector=feature_vec)
         return features, hog_image
     # Otherwise call with one output
     else:      
-        features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
-                       cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=True, 
-                       visualise=vis, feature_vector=feature_vec)
+        features = hog(img,
+                       orientations=orient,
+                       pixels_per_cell=(pix_per_cell, pix_per_cell),
+                       cells_per_block=(cell_per_block, cell_per_block),
+                       transform_sqrt=True, 
+                       visualise=vis,
+                       feature_vector=feature_vec)
         return features
+
 
 # Define a function to extract features from a list of images
 # Have this function call bin_spatial() and color_hist()
 def extract_features(imgs, cspace='RGB', orient=9, 
-                        pix_per_cell=8, cell_per_block=2, hog_channel=0):
+                     pix_per_cell=8, cell_per_block=2, hog_channel=0):
     # Create a list to append feature vectors to
     features = []
     # Iterate through the list of images
@@ -607,7 +565,6 @@ def extract_features(imgs, cspace='RGB', orient=9,
             elif cspace == 'YCrCb':
                 feature_image = cv2.cvtColor(image, cv2.COLOR_RGB2YCrCb)
         else: feature_image = np.copy(image)      
-
         # Call get_hog_features() with vis=False, feature_vec=True
         if hog_channel == 'ALL':
             hog_features = []
@@ -634,27 +591,30 @@ for image in images:
         notcars.append(image)
     else:
         cars.append(image)
-
 # Reduce the sample size because HOG features are slow to compute
 # The quiz evaluator times out after 13s of CPU time
 sample_size = 500
 cars = cars[0:sample_size]
 notcars = notcars[0:sample_size]
-
 ### TODO: Tweak these parameters and see how the results change.
 colorspace = 'RGB' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
 orient = 9
 pix_per_cell = 8
 cell_per_block = 2
 hog_channel = 0 # Can be 0, 1, 2, or "ALL"
-
 t=time.time()
-car_features = extract_features(cars, cspace=colorspace, orient=orient, 
-                        pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, 
-                        hog_channel=hog_channel)
-notcar_features = extract_features(notcars, cspace=colorspace, orient=orient, 
-                        pix_per_cell=pix_per_cell, cell_per_block=cell_per_block, 
-                        hog_channel=hog_channel)
+car_features = extract_features(cars,
+                                cspace=colorspace,
+                                orient=orient, 
+                                pix_per_cell=pix_per_cell,
+                                cell_per_block=cell_per_block, 
+                                hog_channel=hog_channel)
+notcar_features = extract_features(notcars,
+                                   cspace=colorspace,
+                                   orient=orient, 
+                                   pix_per_cell=pix_per_cell,
+                                   cell_per_block=cell_per_block, 
+                                   hog_channel=hog_channel)
 t2 = time.time()
 print(round(t2-t, 2), 'Seconds to extract HOG features...')
 # Create an array stack of feature vectors
@@ -663,16 +623,12 @@ X = np.vstack((car_features, notcar_features)).astype(np.float64)
 X_scaler = StandardScaler().fit(X)
 # Apply the scaler to X
 scaled_X = X_scaler.transform(X)
-
 # Define the labels vector
 y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-
-
 # Split up data into randomized training and test sets
 rand_state = np.random.randint(0, 100)
 X_train, X_test, y_train, y_test = train_test_split(
     scaled_X, y, test_size=0.2, random_state=rand_state)
-
 print('Using:',orient,'orientations',pix_per_cell,
     'pixels per cell and', cell_per_block,'cells per block')
 print('Feature vector length:', len(X_train[0]))
@@ -693,14 +649,10 @@ print('For these',n_predict, 'labels: ', y_test[0:n_predict])
 t2 = time.time()
 print(round(t2-t, 5), 'Seconds to predict', n_predict,'labels with SVC')
 
-
+# ################################################################################
 # 30. Sliding Window Implementation
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/8e39c07e-afd5-4ba5-9204-8b44aa39285c
-
-import numpy as np
-import cv2
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
+# ################################################################################
 
 image = mpimg.imread('bbox-example-image.jpg')
 
@@ -715,13 +667,13 @@ def draw_boxes(img, bboxes, color=(0, 0, 255), thick=6):
     # Return the image copy with boxes drawn
     return imcopy
     
-    
+
 # Define a function that takes an image,
 # start and stop positions in both x and y, 
 # window size (x and y dimensions),  
 # and overlap fraction (for both x and y)
 def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None], 
-                    xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
+                 xy_window=(64, 64), xy_overlap=(0.5, 0.5)):
     # If x and/or y start/stop positions not defined, set to image size
     if x_start_stop[0] == None:
         x_start_stop[0] = 0
@@ -758,30 +710,16 @@ def slide_window(img, x_start_stop=[None, None], y_start_stop=[None, None],
     # Return the list of windows
     return window_list
 
+
 windows = slide_window(image, x_start_stop=[None, None], y_start_stop=[None, None], 
-                    xy_window=(128, 128), xy_overlap=(0.5, 0.5))
-                       
+                       xy_window=(128, 128), xy_overlap=(0.5, 0.5))
 window_img = draw_boxes(image, windows, color=(0, 0, 255), thick=6)                    
 plt.imshow(window_img)
 
-
+# ################################################################################
 # 32. Search and Classify
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/40ac880a-7ccc-4145-a864-6b0b99ea31e9
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import cv2
-import glob
-import time
-from sklearn.svm import LinearSVC
-from sklearn.preprocessing import StandardScaler
-from skimage.feature import hog
-from lesson_functions import *
-# NOTE: the next import is only valid for scikit-learn version <= 0.17
-# for scikit-learn >= 0.18 use:
-# from sklearn.model_selection import train_test_split
-from sklearn.cross_validation import train_test_split
+# ################################################################################
 
 # Define a function to extract features from a single image window
 # This function is very similar to extract_features()
@@ -828,19 +766,18 @@ def single_img_features(img, color_space='RGB', spatial_size=(32, 32),
                         pix_per_cell, cell_per_block, vis=False, feature_vec=True)
         #8) Append features to list
         img_features.append(hog_features)
-
     #9) Return concatenated array of features
     return np.concatenate(img_features)
+
 
 # Define a function you will pass an image 
 # and the list of windows to be searched (output of slide_windows())
 def search_windows(img, windows, clf, scaler, color_space='RGB', 
-                    spatial_size=(32, 32), hist_bins=32, 
-                    hist_range=(0, 256), orient=9, 
-                    pix_per_cell=8, cell_per_block=2, 
-                    hog_channel=0, spatial_feat=True, 
-                    hist_feat=True, hog_feat=True):
-
+                   spatial_size=(32, 32), hist_bins=32, 
+                   hist_range=(0, 256), orient=9, 
+                   pix_per_cell=8, cell_per_block=2, 
+                   hog_channel=0, spatial_feat=True, 
+                   hist_feat=True, hog_feat=True):
     #1) Create an empty list to receive positive detection windows
     on_windows = []
     #2) Iterate over all windows in the list
@@ -849,11 +786,11 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
         test_img = cv2.resize(img[window[0][1]:window[1][1], window[0][0]:window[1][0]], (64, 64))      
         #4) Extract features for that window using single_img_features()
         features = single_img_features(test_img, color_space=color_space, 
-                            spatial_size=spatial_size, hist_bins=hist_bins, 
-                            orient=orient, pix_per_cell=pix_per_cell, 
-                            cell_per_block=cell_per_block, 
-                            hog_channel=hog_channel, spatial_feat=spatial_feat, 
-                            hist_feat=hist_feat, hog_feat=hog_feat)
+                                       spatial_size=spatial_size, hist_bins=hist_bins, 
+                                       orient=orient, pix_per_cell=pix_per_cell, 
+                                       cell_per_block=cell_per_block, 
+                                       hog_channel=hog_channel, spatial_feat=spatial_feat, 
+                                       hist_feat=hist_feat, hog_feat=hog_feat)
         #5) Scale extracted features to be fed to classifier
         test_features = scaler.transform(np.array(features).reshape(1, -1))
         #6) Predict using your classifier
@@ -868,12 +805,11 @@ def search_windows(img, windows, clf, scaler, color_space='RGB',
 # Define a function you will pass an image 
 # and the list of windows to be searched (output of slide_windows())
 def search_windows(img, windows, clf, scaler, color_space='RGB', 
-                    spatial_size=(32, 32), hist_bins=32, 
-                    hist_range=(0, 256), orient=9, 
-                    pix_per_cell=8, cell_per_block=2, 
-                    hog_channel=0, spatial_feat=True, 
-                    hist_feat=True, hog_feat=True):
-
+                   spatial_size=(32, 32), hist_bins=32, 
+                   hist_range=(0, 256), orient=9, 
+                   pix_per_cell=8, cell_per_block=2, 
+                   hog_channel=0, spatial_feat=True, 
+                   hist_feat=True, hog_feat=True):
     #1) Create an empty list to receive positive detection windows
     on_windows = []
     #2) Iterate over all windows in the list
@@ -907,13 +843,11 @@ for image in images:
         notcars.append(image)
     else:
         cars.append(image)
-
 # Reduce the sample size because
 # The quiz evaluator times out after 13s of CPU time
 sample_size = 500
 cars = cars[0:sample_size]
 notcars = notcars[0:sample_size]
-
 ### TODO: Tweak these parameters and see how the results change.
 color_space = 'RGB' # Can be RGB, HSV, LUV, HLS, YUV, YCrCb
 orient = 9  # HOG orientations
@@ -926,35 +860,29 @@ spatial_feat = True # Spatial features on or off
 hist_feat = True # Histogram features on or off
 hog_feat = True # HOG features on or off
 y_start_stop = [None, None] # Min and max in y to search in slide_window()
-
 car_features = extract_features(cars, color_space=color_space, 
-                        spatial_size=spatial_size, hist_bins=hist_bins, 
-                        orient=orient, pix_per_cell=pix_per_cell, 
-                        cell_per_block=cell_per_block, 
-                        hog_channel=hog_channel, spatial_feat=spatial_feat, 
-                        hist_feat=hist_feat, hog_feat=hog_feat)
+                                spatial_size=spatial_size, hist_bins=hist_bins, 
+                                orient=orient, pix_per_cell=pix_per_cell, 
+                                cell_per_block=cell_per_block, 
+                                hog_channel=hog_channel, spatial_feat=spatial_feat, 
+                                hist_feat=hist_feat, hog_feat=hog_feat)
 notcar_features = extract_features(notcars, color_space=color_space, 
-                        spatial_size=spatial_size, hist_bins=hist_bins, 
-                        orient=orient, pix_per_cell=pix_per_cell, 
-                        cell_per_block=cell_per_block, 
-                        hog_channel=hog_channel, spatial_feat=spatial_feat, 
-                        hist_feat=hist_feat, hog_feat=hog_feat)
-
+                                   spatial_size=spatial_size, hist_bins=hist_bins, 
+                                   orient=orient, pix_per_cell=pix_per_cell, 
+                                   cell_per_block=cell_per_block, 
+                                   hog_channel=hog_channel, spatial_feat=spatial_feat, 
+                                   hist_feat=hist_feat, hog_feat=hog_feat)
 X = np.vstack((car_features, notcar_features)).astype(np.float64)                        
 # Fit a per-column scaler
 X_scaler = StandardScaler().fit(X)
 # Apply the scaler to X
 scaled_X = X_scaler.transform(X)
-
 # Define the labels vector
 y = np.hstack((np.ones(len(car_features)), np.zeros(len(notcar_features))))
-
-
 # Split up data into randomized training and test sets
 rand_state = np.random.randint(0, 100)
 X_train, X_test, y_train, y_test = train_test_split(
     scaled_X, y, test_size=0.2, random_state=rand_state)
-
 print('Using:',orient,'orientations',pix_per_cell,
     'pixels per cell and', cell_per_block,'cells per block')
 print('Feature vector length:', len(X_train[0]))
@@ -969,39 +897,27 @@ print(round(t2-t, 2), 'Seconds to train SVC...')
 print('Test Accuracy of SVC = ', round(svc.score(X_test, y_test), 4))
 # Check the prediction time for a single sample
 t=time.time()
-
 image = mpimg.imread('bbox-example-image.jpg')
 draw_image = np.copy(image)
-
 # Uncomment the following line if you extracted training
 # data from .png images (scaled 0 to 1 by mpimg) and the
 # image you are searching is a .jpg (scaled 0 to 255)
 #image = image.astype(np.float32)/255
-
 windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop, 
                        xy_window=(96, 96), xy_overlap=(0.5, 0.5))
-
 hot_windows = search_windows(image, windows, svc, X_scaler, color_space=color_space, 
                              spatial_size=spatial_size, hist_bins=hist_bins, 
                              orient=orient, pix_per_cell=pix_per_cell, 
                              cell_per_block=cell_per_block, 
                              hog_channel=hog_channel, spatial_feat=spatial_feat, 
-                             hist_feat=hist_feat, hog_feat=hog_feat)                       
-
-window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)                    
-
+                             hist_feat=hist_feat, hog_feat=hog_feat)  
+window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)
 plt.imshow(window_img)
 
-
-    
-
+# ################################################################################
 # 33. Multiple Detections & False Positives
 # https://classroom.udacity.com/nanodegrees/nd013/parts/fbf77062-5703-404e-b60c-95b78b2f3f9e/modules/2b62a1c3-e151-4a0e-b6b6-e424fa46ceab/lessons/fd66c083-4ccb-4fe3-bda1-c29db76f50a0/concepts/de41bff0-ad52-493f-8ef4-5506a279b812
-
-import matplotlib.image as mpimg
-import matplotlib.pyplot as plt
-import numpy as np
-import pickle
+# ################################################################################
 
 # Read in a pickle file with bboxes saved
 bbdict = pickle.load( open( "bbox_pickle.p", "rb" ))
@@ -1009,7 +925,6 @@ bbdict = pickle.load( open( "bbox_pickle.p", "rb" ))
 # Each item in the "all_bboxes" list will contain a 
 # list of boxes for one of the images shown above
 all_bboxes = bbdict["bboxes"]
-
 # Read in the last image shown above 
 image = mpimg.imread('img105.jpeg')
 heat = np.zeros_like(image[:,:,0]).astype(np.float)
@@ -1019,10 +934,10 @@ def add_heat(heatmap, bbox_list):
     for box in boxlist:
         # Add += 1 for all pixels inside each bbox
         heat[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
-    
     # Return updated heatmap
     return heatmap
     
+
 def apply_threshold(heatmap, threshold):
     # Zero out pixels below the threshold
     heatmap[heatmap <= threshold] = 0
@@ -1031,9 +946,21 @@ def apply_threshold(heatmap, threshold):
 
 
 for idx, boxlist in enumerate(bboxes):
-    
-    
-    
-
 final_map = np.clip(heat - 2, 0, 255)
 plt.imshow(final_map, cmap='hot')
+
+################################################################################
+
+def get_processor():
+    def process_image(img0):
+        img1 = np.copy(img0)
+        return img1
+    return process_image
+
+
+# in_clip = VideoFileClip("project_video.mp4")
+# out_clip = in_clip.fl_image(get_processor())
+# cProfile.run('out_clip.write_videofile("output_images/project_output.mp4", audio=False)', 'restats')
+
+process = get_processor()
+a = (process(mpimg.imread(f)) for f in cycle(glob.glob("test_images/*.jpg")))
