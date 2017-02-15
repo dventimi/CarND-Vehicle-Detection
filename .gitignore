@@ -1,1 +1,6 @@
 __pycache__
+*.zip
+non-vehicles
+non-vehicles_smallset
+vehicles
+vehicles_smallset
