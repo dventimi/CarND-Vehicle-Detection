@@ -979,14 +979,14 @@ draw_image = np.copy(image)
 #image = image.astype(np.float32)/255
 
 windows = slide_window(image, x_start_stop=[None, None], y_start_stop=y_start_stop, 
-                    xy_window=(96, 96), xy_overlap=(0.5, 0.5))
+                       xy_window=(96, 96), xy_overlap=(0.5, 0.5))
 
 hot_windows = search_windows(image, windows, svc, X_scaler, color_space=color_space, 
-                        spatial_size=spatial_size, hist_bins=hist_bins, 
-                        orient=orient, pix_per_cell=pix_per_cell, 
-                        cell_per_block=cell_per_block, 
-                        hog_channel=hog_channel, spatial_feat=spatial_feat, 
-                        hist_feat=hist_feat, hog_feat=hog_feat)                       
+                             spatial_size=spatial_size, hist_bins=hist_bins, 
+                             orient=orient, pix_per_cell=pix_per_cell, 
+                             cell_per_block=cell_per_block, 
+                             hog_channel=hog_channel, spatial_feat=spatial_feat, 
+                             hist_feat=hist_feat, hog_feat=hog_feat)                       
 
 window_img = draw_boxes(draw_image, hot_windows, color=(0, 0, 255), thick=6)                    
 
