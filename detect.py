@@ -59,7 +59,7 @@ def extract_features(img):
     img = scale(img)
     X = np.array([])
     X = np.append(X,
-                  hog(cv2.cvtColor(img, Theta.colorspace)[:,:,2],
+                  hog(cv2.cvtColor(img, Theta.colorspace)[:,:,Theta.channel],
                       Theta.orient,
                       (Theta.pix_per_cell,Theta.pix_per_cell),
                       (Theta.cell_per_block,Theta.cell_per_block),
@@ -118,30 +118,24 @@ def image_plane_scan(img,ny,overlap,scale):
 image = scale(mpimg.imread("test_images/test1.jpg"))
 print(len(list(map(lambda w: draw_window(image, w[:2]),
                    chain(
-                       image_plane_scan(image,4,0.75,1),
-                       image_plane_scan(image,4,0.75,2),
-                       image_plane_scan(image,4,0.75,3)
+                       image_plane_scan(image,4,0.50,1),
+                       image_plane_scan(image,4,0.50,2),
+                       image_plane_scan(image,4,0.50,3)
                    )))))
 mpimg.imsave("output_images/imageplane-scan.png", image, format="png")
 
 
 def add_heat(heatmap, bbox_list):
-    # Iterate through list of bboxes
     for box in bbox_list:
-        # Add += 1 for all pixels inside each bbox
-        # Assuming each "box" takes the form ((x1, y1), (x2, y2))
         heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
-    # Return updated heatmap
-    return heatmap# Iterate through list of bboxes
-    
-def apply_threshold(heatmap, threshold):
-    # Zero out pixels below the threshold
+    return heatmap
+
+def apply_threshold(heat, threshold):
+    heatmap = np.copy(heat)
     heatmap[heatmap <= threshold] = 0
-    # Return thresholded map
     return heatmap
 
 def draw_labeled_bboxes(img, labels):
-    # Iterate through all detected cars
     for car_number in range(1, labels[1]+1):
         # Find pixels with each car_number label value
         nonzero = (labels[0] == car_number).nonzero()
@@ -178,7 +172,7 @@ finally:
 box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
 heat = np.zeros_like(image[:,:,0]).astype(np.float)
 heat = add_heat(heat,box_list)
-heat = apply_threshold(heat,10)
+heat = apply_threshold(heat,2)
 labels = label(heat)
 print(labels[1], 'cars found')
 draw_img = draw_labeled_bboxes(np.copy(image), labels)
@@ -191,14 +185,32 @@ plt.imshow(heat, cmap='hot')
 plt.title('Heat Map')
 fig.tight_layout()
 
+def cool(val):
+    return val*0.9
+
+temp = np.vectorize(lambda val: cool(val))
+
+
 def get_processor(pool, grid):
     heat = np.zeros_like(image[:,:,0]).astype(np.float)
+    flat = np.zeros_like(image[:,:,0]).astype(np.float)
+    frame = [0]
     def process_image(img):
+        nonlocal heat
+        frame[0] += 1
         image = np.copy(img)
         results = pool.map(process, get_patches(image, grid))
         box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
+        heat*=0.90
         add_heat(heat,box_list)
-        return scale(np.dstack((heat,heat,heat)))
+        # out_img = scale(np.dstack((heat,heat,flat)))
+        thresholded = apply_threshold(heat,25)
+        labels = label(thresholded)
+        draw_img = draw_labeled_bboxes(np.copy(img), labels)
+        cv2.putText(draw_img, "Frame: %s" % frame[0], (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        cv2.putText(draw_img, "Max: %.2f" % np.max(heat), (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        cv2.putText(draw_img, "Cars: %s" % labels[1], (50,110), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        return draw_img
     return process_image
 
 
