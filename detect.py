@@ -1,39 +1,39 @@
 from glob import glob
 from itertools import groupby, islice, zip_longest, cycle, filterfalse, chain
+from lesson_functions import *
 from moviepy.editor import VideoFileClip, VideoClip
+from mpl_toolkits.mplot3d import Axes3D
 from multiprocessing import Pool
 from random import choice, sample
+from scipy.cluster.vq import kmeans,vq
+from scipy.ndimage.measurements import label
+from scipy.stats import gaussian_kde
 from skimage import color, exposure
 from skimage.feature import hog
 from sklearn.cross_validation import train_test_split
 from sklearn.model_selection import train_test_split
+from sklearn.neighbors.kde import KernelDensity
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 import builtins
+import cProfile
 import cv2
 import math
 import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
+import pdb
 import time
 import timeit
 
-
-crt2cyl = lambda x,y,z: (math.sqrt(x**2+y**2), math.atan2(y,x), z)
-cyl2crt = lambda rho,phi,z: (rho*math.cos(phi), rho*math.sin(phi), z)
-cyl2sph = lambda rho,phi,z: (math.sqrt(rho**2+z**2), math.atan2(rho, z), phi)
-sph2cyl = lambda r,theta,phi: (r*math.sin(theta), phi, r*math.cos(theta))
-crt2sph = lambda x,y,z: (math.sqrt(x**2+y**2+z**2), math.acos(z/math.sqrt(x**2+y**2+z**2)), math.atan2(y,x))
-sph2crt = lambda r,theta,phi: (r*math.sin(theta)*math.cos(phi), r*math.sin(theta)*math.sin(phi), r*math.cos(theta))
-
+plt.ion()
 
 feed = lambda pattern, y: ((f, y) for f in glob(pattern))
 shuffle = lambda l: sample(l, len(l))
 scale = lambda img: (img/np.max(img)*255).astype(np.uint8)
-load = lambda g: ((scale(mpimg.imread(x[0])),x[1]) for x in g)
+load = lambda g: ((mpimg.imread(x[0]),x[1]) for x in g)
 flip = lambda g: ((x[0][:,::-1,:],x[1]) for x in g)
 mirror = lambda g: chain(g, flip(g))
-
 
 class HyperParameters:
     def __init__(self):
@@ -42,23 +42,29 @@ class HyperParameters:
 
 global Theta
 Theta = HyperParameters()
-Theta.colorspace = cv2.COLOR_RGB2HSV
+Theta.cell_per_block = 4
 Theta.channel = 2
+Theta.colorspace = cv2.COLOR_RGB2HSV
+Theta.feature_vec = True
 Theta.orient = 15
 Theta.pix_per_cell = 16
-Theta.cell_per_block = 4
 Theta.transform_sqrt = False
-Theta.feature_vec = True
+Theta.horizon = 0.28
+Theta.height = 2
+Theta.width = 2
+Theta.spatial_size = 32
 
 
 def extract_features(img):
+    img = scale(img)
     X = np.array([])
-    X = np.append(X, hog(cv2.cvtColor(img, Theta.colorspace)[:,:,2],
-                         Theta.orient,
-                         (Theta.pix_per_cell,Theta.pix_per_cell),
-                         (Theta.cell_per_block,Theta.cell_per_block),
-                         transform_sqrt = Theta.transform_sqrt,
-                         feature_vector = Theta.feature_vec))
+    X = np.append(X,
+                  hog(cv2.cvtColor(img, Theta.colorspace)[:,:,2],
+                      Theta.orient,
+                      (Theta.pix_per_cell,Theta.pix_per_cell),
+                      (Theta.cell_per_block,Theta.cell_per_block),
+                      transform_sqrt = Theta.transform_sqrt,
+                      feature_vector = Theta.feature_vec))
     s = StandardScaler().fit(X)
     return s.transform(X)
 
@@ -68,35 +74,13 @@ def get_classifier(X, y):
     svc.fit(X, y)
     return svc
 
+
 samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
 data = cycle(mirror(load(shuffle(samples))))
-
-Theta.colorspace = cv2.COLOR_RGB2HSV
-Theta.channel = 2
-Theta.orient = 15
-Theta.pix_per_cell = 16
-Theta.cell_per_block = 4
-Theta.transform_sqrt = False
-Theta.feature_vec = True
 
 X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=0.2, random_state=np.random.randint(0, 100))
 classifier = get_classifier(X_train,y_train)
 print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
-
-
-def get_window(img, x, y, z, horizon=0.5, width=2, height=2):
-    d = 1
-    r,theta,phi = crt2sph(x,y,z)
-    rho2 = d*math.tan(theta)
-    x2,y2 = (rho2*math.cos(phi),rho2*math.sin(phi))
-    center = (int(img.shape[1]*0.5+x2*img.shape[1]//2),
-              int(img.shape[0]*(1-horizon)-y2*img.shape[1]//2))
-    scale = img.shape[1]//2
-    dx = int(width/2*scale/z)
-    dy = int(height/2*scale/z)
-    window = [(center[0]-dx,center[1]-dy), (center[0]+dx,center[1]+dy)] + [(x,y,z)]
-    return window
-
 
 def draw_window(img, bbox, color=(0,0,255), thick=3):
     cv2.rectangle(img, bbox[0], bbox[1], color, thick)
@@ -104,145 +88,127 @@ def draw_window(img, bbox, color=(0,0,255), thick=3):
 
 
 def get_patches(img, grid, size=(64,64)):
-    return ((cv2.resize(image[window[0][1]:window[1][1],
-                              window[0][0]:window[1][0]],size),window[2]) for window in grid)
+    return ((cv2.resize(img[window[0][1]:window[1][1],
+                            window[0][0]:window[1][0]],size),window) for window in grid)
 
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-draw_window(image, get_window(image, 0, 0.0, 1, horizon=0.5, width=2, height=1))
-mpimg.imsave("output_images/windshield.png", image, format="png")
-plt.imshow(image)
+clip_window = lambda x, box: sum([box[0]<=x[0][0]<=box[1],
+                                  box[0]<=x[1][0]<=box[1],
+                                  box[2]<=x[0][1]<=box[3],
+                                  box[2]<=x[1][1]<=box[3]])==4
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-draw_window(image, get_window(image, 4.1, -1.0, 8, horizon=0.28))
-draw_window(image, get_window(image, -10.5, -1.0, 22, horizon=0.28))
-draw_window(image, get_window(image, -6.1, -1.0, 32, horizon=0.28))
-draw_window(image, get_window(image, -0.8, -1.0, 35, horizon=0.28))
-draw_window(image, get_window(image, 3, -1.0, 55, horizon=0.28))
-draw_window(image, get_window(image, -6.1, -1.0, 55, horizon=0.28))
-draw_window(image, get_window(image, -6.1, -1.0, 70, horizon=0.28))
-mpimg.imsave("output_images/bbox-example-image-test.png", image, format="png")
-plt.imshow(image)
 
-clip_window = lambda x, img: sum([0<=x[0][0]<=image.shape[1],
-                                  0<=x[1][0]<=image.shape[1],
-                                  0<=x[0][1]<=image.shape[0],
-                                  0<=x[1][1]<=image.shape[0]])==4
-
-def zooming_windows(img):
-    def make_frame(t):
-        frame = np.copy(img)
-        z = 2**(t % 5)*5
-        draw_window(frame, get_window(frame,-10.5,-1.0,z,horizon=0.28))
-        draw_window(frame, get_window(frame,-6.1,-1.0,z,horizon=0.28))
-        draw_window(frame, get_window(frame,-0.8,-1.0,z,horizon=0.28))
-        draw_window(frame, get_window(frame,4.1,-1.0,z,horizon=0.28))
-        cv2.putText(frame, "z: %.2f m" % z, (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        return frame
-    return make_frame
-clip = VideoClip(zooming_windows(mpimg.imread('bbox-example-image.jpg')), duration=5)
-clip.write_videofile("output_images/zooming-windows.mp4", fps=25)
-
-def get_frame_maker(img, grid):
-    def make_frame(t):
-        frame = np.copy(img)
-        draw_window(frame, grid.__next__()[:2], color=(0,255,255))
-        return frame
-    return make_frame
-
-def sparse_scan(img):
-    grid = np.mgrid[-10:12:2,-1.0:0:2,3:7:1]
-    grid[2,]=2**grid[2,]
-    grid = grid.T.reshape(-1,3)
-    grid = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] for x in grid)
-    grid = filter(lambda x: clip_window(x, img), grid)
+def image_plane_scan(img,ny,overlap,scale):
+    size = int(img.shape[0]//ny)//scale
+    delta = int(size*(1-overlap))
+    box1 = (0,
+            img.shape[1],
+            (img.shape[0]-img.shape[0]//scale)//2,
+            img.shape[0] - (img.shape[0]-img.shape[0]//scale)//2)
+    box2 = (0,
+            img.shape[1],
+            (img.shape[0]//2),
+            img.shape[0])
+    grid = np.mgrid[0:img.shape[1]:delta,img.shape[0]:-delta:-delta].T.reshape(-1,2)
+    grid = ([(c[0],c[1]), (c[0]+size,c[1]+size)] for c in grid)
+    grid = filter(lambda x: clip_window(x, box1), grid)
+    grid = filter(lambda x: clip_window(x, box2), grid)
     return grid
+    
+image = scale(mpimg.imread("test_images/test1.jpg"))
+print(len(list(map(lambda w: draw_window(image, w[:2]),
+                   chain(
+                       image_plane_scan(image,4,0.75,1),
+                       image_plane_scan(image,4,0.75,2),
+                       image_plane_scan(image,4,0.75,3)
+                   )))))
+mpimg.imsave("output_images/imageplane-scan.png", image, format="png")
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-print(len(list(map(lambda w: draw_window(image, w[:2]), sparse_scan(image)))))
-mpimg.imsave("output_images/sparse-scan.png", image, format="png")
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-clip = VideoClip(get_frame_maker(image, cycle(sparse_scan(image))), duration=10)
-clip.write_videofile("output_images/sparse-scan.mp4", fps=25)
+def add_heat(heatmap, bbox_list):
+    # Iterate through list of bboxes
+    for box in bbox_list:
+        # Add += 1 for all pixels inside each bbox
+        # Assuming each "box" takes the form ((x1, y1), (x2, y2))
+        heatmap[box[0][1]:box[1][1], box[0][0]:box[1][0]] += 1
+    # Return updated heatmap
+    return heatmap# Iterate through list of bboxes
+    
+def apply_threshold(heatmap, threshold):
+    # Zero out pixels below the threshold
+    heatmap[heatmap <= threshold] = 0
+    # Return thresholded map
+    return heatmap
 
-def dense_scan(img, h=2,w=2):
-    grid = np.mgrid[-10:12:0.5,-1.0:0:2,10:100:2]
-    grid = grid.T.reshape(-1,3)
-    grid = (get_window(img,x[0],x[1],x[2], horizon=0.28, height=h, width=w)+[x] for x in grid)
-    grid = filter(lambda x: clip_window(x, img), grid)
-    return grid
+def draw_labeled_bboxes(img, labels):
+    # Iterate through all detected cars
+    for car_number in range(1, labels[1]+1):
+        # Find pixels with each car_number label value
+        nonzero = (labels[0] == car_number).nonzero()
+        # Identify x and y values of those pixels
+        nonzeroy = np.array(nonzero[0])
+        nonzerox = np.array(nonzero[1])
+        # Define a bounding box based on min/max x and y
+        bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        # Draw the box on the image
+        cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+    # Return the image
+    return img
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-print(len(list(map(lambda w: draw_window(image, w[:2]), dense_scan(image)))))
-mpimg.imsave("output_images/dense-scan.png", image, format="png")
+image = scale(mpimg.imread("test_images/test1.jpg"))
+grid = chain(
+    image_plane_scan(image,4,0.50,1),
+    image_plane_scan(image,4,0.50,2),
+    image_plane_scan(image,4,0.50,3),
+)
+grid = list(grid)
 
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-clip = VideoClip(get_frame_maker(image, cycle(dense_scan(image))), duration=20)
-clip.write_videofile("output_images/dense-scan.mp4", fps=60)
-
-def perimeter_scan(img):
-    grid = np.mgrid[-12:14:1,-1.0:0:2,5:100:2]
-    grid = grid.T.reshape(-1,3)
-    grid = list(filter(lambda x: not (-7<=x[0]<=7 and 6<=x[2]<=80), grid))
-    grid = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] for x in grid)
-    grid = filter(lambda x: clip_window(x, img), grid)
-    return grid
-
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-print(len(list(map(lambda w: draw_window(image, w[:2]), perimeter_scan(image)))))
-mpimg.imsave("output_images/perimeter-scan.png", image, format="png")
-
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-clip = VideoClip(get_frame_maker(image, cycle(perimeter_scan(image))), duration=20)
-clip.write_videofile("output_images/perimeter-scan.mp4", fps=60)
-
-def local_scan(img, nodes):
-    grid = chain((np.mgrid[n[0]-1:n[0]+2:1,
-                           -1.0:0:2,
-                           n[2]-1:n[2]+2:1].T.reshape(-1,3)) for n in nodes)
-    grid = np.concatenate(list(grid))
-    grid = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] for x in grid)
-    grid = filter(lambda x: clip_window(x, img), grid)
-    return grid
-
-nodes = [(4.1, -1.0, 8),
-         (-10.5, -1.0, 22),
-         (-6.1, -1.0, 32),
-         (-0.8, -1.0, 35),
-         (3, -1.0, 55),
-         (-6.1, -1.0, 55),
-         (-6.1, -1.0, 70)]
-
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-print(len(list(map(lambda w: draw_window(image, w[:2]), local_scan(image, nodes)))))
-mpimg.imsave("output_images/local-scan.png", image, format="png")
-
-image = scale(mpimg.imread("bbox-example-image.jpg"))
-clip = VideoClip(get_frame_maker(image, cycle(local_scan(image, nodes))), duration=10)
-clip.write_videofile("output_images/local-scan.mp4", fps=25)
-
-# image = scale(mpimg.imread("bbox-example-image.jpg"))
-# patches = get_patches(image, dense_scan(image, 4,4))
-# def f(x):
-#     print(x[0])
-#     plt.imshow(x[1])
-# a = map(f, ((classifier.predict(extract_features(x[0])),x[0]) for x in patches))
-
-import builtins
 def process(x):
     return (classifier.predict(extract_features(x[0]))[0],x[1])
-pool = Pool(12)
-builtins.__dict__.update(locals())
-results = pool.map(process, get_patches(image, dense_scan(image,4,4)))
-pool.close()
 
-_,r = zip(*filter(lambda x: x[0]>0, results))
 
-x,y,z = zip(*r)
+try:
+    pool = Pool(12)
+    builtins.__dict__.update(locals())
+    results = pool.map(process, get_patches(image, grid))
+finally:
+    pool.close()
+    pool.join()
 
-import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
+box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
+heat = np.zeros_like(image[:,:,0]).astype(np.float)
+heat = add_heat(heat,box_list)
+heat = apply_threshold(heat,10)
+labels = label(heat)
+print(labels[1], 'cars found')
+draw_img = draw_labeled_bboxes(np.copy(image), labels)
 fig = plt.figure()
-ax = fig.add_subplot(111, projection='3d')
-ax.scatter(x,y,z)
+plt.subplot(121)
+plt.imshow(draw_img)
+plt.title('Car Positions')
+plt.subplot(122)
+plt.imshow(heat, cmap='hot')
+plt.title('Heat Map')
+fig.tight_layout()
+
+def get_processor(pool, grid):
+    heat = np.zeros_like(image[:,:,0]).astype(np.float)
+    def process_image(img):
+        image = np.copy(img)
+        results = pool.map(process, get_patches(image, grid))
+        box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
+        add_heat(heat,box_list)
+        return scale(np.dstack((heat,heat,heat)))
+    return process_image
+
+
+builtins.__dict__.update(locals())
+in_clip = VideoFileClip("project_video.mp4")
+try:
+    pool = Pool(8)
+    out_clip = in_clip.fl_image(get_processor(pool, grid))
+    out_clip.write_videofile("output_images/project_output.mp4", audio=False)
+finally:
+    pool.close()
+    pool.join()
+
