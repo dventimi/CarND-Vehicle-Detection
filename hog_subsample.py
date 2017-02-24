@@ -5,8 +5,6 @@ import pickle
 import cv2
 from lesson_functions import *
 
-svc = dist_pickle["svc"]
-X_scaler = 
 orient = 9
 pix_per_cell = 8
 cell_per_block = 2

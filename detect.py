@@ -167,9 +167,9 @@ def process(x):
     return (classifier.predict(extract_features(x[0]))[0],x[1])
 
 
+builtins.__dict__.update(locals())
 try:
     pool = Pool(12)
-    builtins.__dict__.update(locals())
     results = pool.map(process, get_patches(image, grid))
 finally:
     pool.close()
