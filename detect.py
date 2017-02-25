@@ -144,16 +144,20 @@ def draw_labeled_bboxes(img, labels):
         nonzerox = np.array(nonzero[1])
         # Define a bounding box based on min/max x and y
         bbox = ((np.min(nonzerox), np.min(nonzeroy)), (np.max(nonzerox), np.max(nonzeroy)))
+        center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
+                  np.mean((np.min(nonzeroy), np.max(nonzeroy))))
         # Draw the box on the image
         cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+        cv2.putText(img, "Car: %s" % car_number, (bbox[0][0],bbox[0][1]-20), cv2.FONT_HERSHEY_DUPLEX, 0.5, (255,255,255), 1)
+        cv2.putText(img, "Center: %s" % (center,), (bbox[0][0],bbox[0][1]-10), cv2.FONT_HERSHEY_DUPLEX, .5, (255,255,255), 1)
     # Return the image
     return img
 
 image = scale(mpimg.imread("test_images/test1.jpg"))
 grid = chain(
-    image_plane_scan(image,4,0.50,1),
-    image_plane_scan(image,4,0.50,2),
-    image_plane_scan(image,4,0.50,3),
+    image_plane_scan(image,4,0.750,1),
+    image_plane_scan(image,4,0.750,2),
+    image_plane_scan(image,4,0.750,3),
 )
 grid = list(grid)
 
@@ -172,7 +176,7 @@ finally:
 box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
 heat = np.zeros_like(image[:,:,0]).astype(np.float)
 heat = add_heat(heat,box_list)
-heat = apply_threshold(heat,2)
+heat = apply_threshold(heat,3)
 labels = label(heat)
 print(labels[1], 'cars found')
 draw_img = draw_labeled_bboxes(np.copy(image), labels)
@@ -198,13 +202,12 @@ def get_processor(pool, grid):
     def process_image(img):
         nonlocal heat
         frame[0] += 1
+        heat*=0.90
         image = np.copy(img)
         results = pool.map(process, get_patches(image, grid))
         box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
-        heat*=0.90
         add_heat(heat,box_list)
-        # out_img = scale(np.dstack((heat,heat,flat)))
-        thresholded = apply_threshold(heat,25)
+        thresholded = apply_threshold(heat,50)
         labels = label(thresholded)
         draw_img = draw_labeled_bboxes(np.copy(img), labels)
         cv2.putText(draw_img, "Frame: %s" % frame[0], (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
