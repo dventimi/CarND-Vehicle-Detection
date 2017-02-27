@@ -292,8 +292,9 @@ class Component:
         return distance < c1.size() + c2.size()
 
 
-    def __init__(self, pool, img, origin=None, size=None):
+    def __init__(self, pool, clip, img, origin=None, size=None):
         self.pool = pool
+        self.in_clip = clip
         self.image = img
         self.mainwindow = np.copy(image)
         self.bboxwindow = np.copy(image)
@@ -303,6 +304,7 @@ class Component:
         self.children = []
         self.origin = origin if origin else tuple(np.array(img.shape[:2][::-1])//2)
         self.size = size if size else min(img.shape[:2])//2
+        self.out_clip = self.in_clip.fl_image(self.process_image)
 
 
     def center(self):
@@ -385,13 +387,16 @@ class Component:
         return self.get_out_img()
 
 
+    def write_videofile(self, filename):
+        self.out_clip.write_videofile(filename, audio=False)
+
+
 builtins.__dict__.update(locals())
 in_clip = VideoFileClip("test_video.mp4")
 try:
     pool = Pool(8)
-    scene = Component(pool, scale(mpimg.imread("test_images/test1.jpg")))
-    out_clip = in_clip.fl_image(scene.process_image)
-    out_clip.write_videofile("output_images/test_output.mp4", audio=False)
+    scene = Component(pool, in_clip, scale(mpimg.imread("test_images/test1.jpg")))
+    scene.write_videofile("output_images/test_output.mp4")
 finally:
     pool.close()
     pool.join()
