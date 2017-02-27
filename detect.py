@@ -292,9 +292,14 @@ class Component:
         return distance < c1.size() + c2.size()
 
 
-    def __init__(self, img, origin=None, size=None):
+    def __init__(self, pool, img, origin=None, size=None):
+        self.pool = pool
         self.image = img
+        self.mainwindow = np.copy(image)
+        self.bboxwindow = np.copy(image)
         self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
+        self.flat = np.zeros_like(image[:,:,0]).astype(np.float)
+        self.labels = None
         self.children = []
         self.origin = origin if origin else tuple(np.array(img.shape[:2][::-1])//2)
         self.size = size if size else min(img.shape[:2])//2
@@ -329,12 +334,27 @@ class Component:
         # list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
 
 
-    def evolve(self, bboxwindow, mainwindow):
+    def evolve(self, image):
         self.cool()
+        self.mainwindow = np.copy(image)
+        self.bboxwindow = np.copy(image)
         grid = self.grid(1000)
-        self.addboxes(bboxwindow, grid)
-        results = self.sample(pool, mainwindow, grid)
+        self.addboxes(self.bboxwindow, grid)
+        results = self.sample(self.pool, self.mainwindow, grid)
         self.heat(results)
+        thresholded = apply_threshold(self.get_heatmap(),20)
+        self.labels = label(thresholded)
+        draw_labeled_bboxes(self.mainwindow, labels)
+
+
+    def get_out_img(self):
+        bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
+        heat_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
+                              tuple(np.array(image.shape[:2][::-1])//2))
+        outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow, np.hstack((bbox_img,heat_img)))), np.vstack((heat_img, heat_img, heat_img)))), tuple(np.array(self.image.shape[:2][::-1])))
+        cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        return outp_img
 
 
     def grid(self, num):
@@ -360,36 +380,17 @@ class Component:
             center = center
 
 
-def get_processor(pool, image):
-    scene = Component(image)
-    flat = np.zeros_like(image[:,:,0]).astype(np.float)
-    def process_image(image):
-        nonlocal scene
-        mainwindow = np.copy(image)
-        bboxwindow = np.copy(image)
-        scene.evolve(bboxwindow, mainwindow)
-        bboxwindow = cv2.resize(bboxwindow, tuple(np.array(image.shape[:2][::-1])//2))
-        thresholded = apply_threshold(scene.get_heatmap(),20)
-        labels = label(thresholded)
-        heat_img = cv2.resize(np.dstack([scene.get_heatmap(), scene.get_heatmap(), flat]),
-                              tuple(np.array(image.shape[:2][::-1])//2))
-        draw_labeled_bboxes(mainwindow, labels)
-        img = cv2.resize(np.hstack((np.vstack((mainwindow,
-                                               np.hstack((bboxwindow,heat_img)))),
-                                    np.vstack((heat_img,heat_img,heat_img)))),
-                         tuple(np.array(image.shape[:2][::-1])))
-        cv2.putText(img, "Max: %.2f" % np.max(scene.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        cv2.putText(img, "Cars: %s" % labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        return img
-    return process_image
+    def process_image(self, image):
+        self.evolve(image)
+        return self.get_out_img()
 
 
 builtins.__dict__.update(locals())
 in_clip = VideoFileClip("test_video.mp4")
 try:
     pool = Pool(8)
-    out_clip = in_clip.fl_image(get_processor(pool,
-                                              scale(mpimg.imread("test_images/test1.jpg"))))
+    scene = Component(pool, scale(mpimg.imread("test_images/test1.jpg")))
+    out_clip = in_clip.fl_image(scene.process_image)
     out_clip.write_videofile("output_images/test_output.mp4", audio=False)
 finally:
     pool.close()
