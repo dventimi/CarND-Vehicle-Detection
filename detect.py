@@ -283,6 +283,56 @@ fig.tight_layout()
 plt.savefig("output_images/heatmaptest.png")
 
 
+
+
+class Component:
+    def overlap(c1, c2):
+        distance = ((c1.center()[0]-c2.center()[0])**2 +
+                    (c1.center()[1]-c2.center()[1])**2)**0.5
+        return distance < c1.size() + c2.size()
+
+
+    def __init__(self, img, origin=None, size=None):
+        self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
+        self.children = []
+        self.origin = origin if origin else tuple(np.array(img.shape[:2][::-1])//2)
+        self.size = size if size else min(img.shape[:2])//2
+
+
+    def center():
+        return center
+
+
+    def size():
+        return size
+
+
+    def cool():
+        heatmap*=0.98
+
+
+    def heat(samples):
+        list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
+
+
+    def grid():
+        return list(random_scan3(mainwindow, mainwindow.shape[1]//4, 1000))
+
+    def spawn():
+        thresholded = apply_threshold(heat,1)
+        labels = label(thresholded)
+        for car_number in range(1, labels[1]+1):
+            nonzero = (labels[0] == car_number).nonzero()
+            nonzeroy = np.array(nonzero[0])
+            nonzerox = np.array(nonzero[1])
+            bbox = ((np.min(nonzerox), np.min(nonzeroy)),
+                    (np.max(nonzerox), np.max(nonzeroy)))
+            size = min(bbox[0][1]-bbox[0][0], bbox[1][1]-bbox[1][0])
+            center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
+                      np.mean((np.min(nonzeroy), np.max(nonzeroy))))
+            center = center
+
+
 def get_processor(pool, grid):
     heat = np.zeros_like(image[:,:,0]).astype(np.float)
     flat = np.zeros_like(image[:,:,0]).astype(np.float)
@@ -291,13 +341,14 @@ def get_processor(pool, grid):
         mainwindow = np.copy(image)
         bboxwindow = np.copy(image)
         heat*=0.98
-        grid = list(random_scan3(mainwindow, mainwindow.shape[1]//4))
+        grid = list(random_scan3(mainwindow, mainwindow.shape[1]//4, 1000))
         list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
         results = pool.map(process, get_patches(mainwindow, grid))
         box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
         add_heat(heat,box_list)
+        # heat_img = np.dstack((heat,heat,flat))
         bboxwindow = cv2.resize(bboxwindow, tuple(np.array(image.shape[:2][::-1])//2))
-        thresholded = apply_threshold(heat,30)
+        thresholded = apply_threshold(heat,20)
         labels = label(thresholded)
         heat_img = cv2.resize(np.dstack([heat, heat, flat]),
                               tuple(np.array(image.shape[:2][::-1])//2))
@@ -321,12 +372,3 @@ try:
 finally:
     pool.close()
     pool.join()
-
-print(timeit.timeit('list(random_scan2(image,128))',number=1))
-
-
-
-class Component:
-    def __init__(self, shape):
-        self.heat = np.zeros(shape)
-        self.children = []
