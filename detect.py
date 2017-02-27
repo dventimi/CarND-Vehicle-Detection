@@ -293,33 +293,42 @@ class Component:
 
 
     def __init__(self, img, origin=None, size=None):
+        self.image = img
         self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
         self.children = []
         self.origin = origin if origin else tuple(np.array(img.shape[:2][::-1])//2)
         self.size = size if size else min(img.shape[:2])//2
 
 
-    def center():
-        return center
+    def center(self):
+        return self.center
 
 
-    def size():
-        return size
+    def size(self):
+        return self.size
 
 
-    def cool():
-        heatmap*=0.98
+    def cool(self):
+        self.heatmap*=0.98
 
 
-    def heat(samples):
-        list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
+    def get_heatmap(self):
+        return self.heatmap
 
 
-    def grid():
-        return list(random_scan3(mainwindow, mainwindow.shape[1]//4, 1000))
+    def heat(self, samples):
+        for s in samples:
+            self.heatmap[s[0][1]:s[1][1],
+                         s[0][0]:s[1][0]] += 1
+        # list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
 
-    def spawn():
-        thresholded = apply_threshold(heat,1)
+
+    def grid(self, num):
+        return list(random_scan3(self.image, self.image.shape[1]//4, num))
+
+
+    def spawn(self):
+        thresholded = apply_threshold(self.heatmap,1)
         labels = label(thresholded)
         for car_number in range(1, labels[1]+1):
             nonzero = (labels[0] == car_number).nonzero()
@@ -333,31 +342,34 @@ class Component:
             center = center
 
 
-def get_processor(pool, grid):
+def get_processor(pool, image):
+    scene = Component(image)
     heat = np.zeros_like(image[:,:,0]).astype(np.float)
     flat = np.zeros_like(image[:,:,0]).astype(np.float)
     def process_image(image):
         nonlocal heat
+        nonlocal scene
         mainwindow = np.copy(image)
         bboxwindow = np.copy(image)
         heat*=0.98
-        grid = list(random_scan3(mainwindow, mainwindow.shape[1]//4, 1000))
+        scene.cool()
+        grid = scene.grid(1000)
         list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
         results = pool.map(process, get_patches(mainwindow, grid))
         box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
         add_heat(heat,box_list)
-        # heat_img = np.dstack((heat,heat,flat))
+        scene.heat(box_list)
         bboxwindow = cv2.resize(bboxwindow, tuple(np.array(image.shape[:2][::-1])//2))
-        thresholded = apply_threshold(heat,20)
+        thresholded = apply_threshold(scene.get_heatmap(),20)
         labels = label(thresholded)
-        heat_img = cv2.resize(np.dstack([heat, heat, flat]),
+        heat_img = cv2.resize(np.dstack([scene.get_heatmap(), scene.get_heatmap(), flat]),
                               tuple(np.array(image.shape[:2][::-1])//2))
         draw_labeled_bboxes(mainwindow, labels)
         img = cv2.resize(np.hstack((np.vstack((mainwindow,
                                                np.hstack((bboxwindow,heat_img)))),
                                     np.vstack((heat_img,heat_img,heat_img)))),
                          tuple(np.array(image.shape[:2][::-1])))
-        cv2.putText(img, "Max: %.2f" % np.max(heat), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        cv2.putText(img, "Max: %.2f" % np.max(scene.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         cv2.putText(img, "Cars: %s" % labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         return img
     return process_image
@@ -365,9 +377,10 @@ def get_processor(pool, grid):
 
 builtins.__dict__.update(locals())
 in_clip = VideoFileClip("project_video.mp4")
+image = scale(mpimg.imread("test_images/test1.jpg"))
 try:
     pool = Pool(8)
-    out_clip = in_clip.fl_image(get_processor(pool, grid))
+    out_clip = in_clip.fl_image(get_processor(pool, image))
     out_clip.write_videofile("output_images/project_output.mp4", audio=False)
 finally:
     pool.close()
