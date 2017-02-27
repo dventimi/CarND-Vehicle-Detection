@@ -316,15 +316,33 @@ class Component:
         return self.heatmap
 
 
-    def heat(self, samples):
+    def sample(self, pool, mainwindow, grid):
+        results = pool.map(process, get_patches(mainwindow, grid))
+        return results
+
+
+    def heat(self, results):
+        samples = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
         for s in samples:
             self.heatmap[s[0][1]:s[1][1],
                          s[0][0]:s[1][0]] += 1
         # list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
 
 
+    def evolve(self, bboxwindow, mainwindow):
+        self.cool()
+        grid = self.grid(1000)
+        self.addboxes(bboxwindow, grid)
+        results = self.sample(pool, mainwindow, grid)
+        self.heat(results)
+
+
     def grid(self, num):
         return list(random_scan3(self.image, self.image.shape[1]//4, num))
+
+
+    def addboxes(self, bboxwindow, grid):
+        list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
 
 
     def spawn(self):
@@ -344,21 +362,12 @@ class Component:
 
 def get_processor(pool, image):
     scene = Component(image)
-    heat = np.zeros_like(image[:,:,0]).astype(np.float)
     flat = np.zeros_like(image[:,:,0]).astype(np.float)
     def process_image(image):
-        nonlocal heat
         nonlocal scene
         mainwindow = np.copy(image)
         bboxwindow = np.copy(image)
-        heat*=0.98
-        scene.cool()
-        grid = scene.grid(1000)
-        list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
-        results = pool.map(process, get_patches(mainwindow, grid))
-        box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
-        add_heat(heat,box_list)
-        scene.heat(box_list)
+        scene.evolve(bboxwindow, mainwindow)
         bboxwindow = cv2.resize(bboxwindow, tuple(np.array(image.shape[:2][::-1])//2))
         thresholded = apply_threshold(scene.get_heatmap(),20)
         labels = label(thresholded)
@@ -376,12 +385,12 @@ def get_processor(pool, image):
 
 
 builtins.__dict__.update(locals())
-in_clip = VideoFileClip("project_video.mp4")
-image = scale(mpimg.imread("test_images/test1.jpg"))
+in_clip = VideoFileClip("test_video.mp4")
 try:
     pool = Pool(8)
-    out_clip = in_clip.fl_image(get_processor(pool, image))
-    out_clip.write_videofile("output_images/project_output.mp4", audio=False)
+    out_clip = in_clip.fl_image(get_processor(pool,
+                                              scale(mpimg.imread("test_images/test1.jpg"))))
+    out_clip.write_videofile("output_images/test_output.mp4", audio=False)
 finally:
     pool.close()
     pool.join()
