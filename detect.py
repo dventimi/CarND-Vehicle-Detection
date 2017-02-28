@@ -147,10 +147,10 @@ def draw_labeled_bboxes(img, labels):
                 (np.max(nonzerox), np.max(nonzeroy)))
         center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
                   np.mean((np.min(nonzeroy), np.max(nonzeroy))))
-        list(random_scan3(img, img.shape[1]//4,
-                          1000,
-                          maxr=bbox[1][0]-bbox[0][0],
-                          origin=center))
+        # list(random_scan3(img, img.shape[1]//4,
+        #                   1000,
+        #                   maxr=bbox[1][0]-bbox[0][0],
+        #                   origin=center))
         cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
         cv2.putText(img, "Car: %s" % car_number,
                     (bbox[0][0],bbox[0][1]-20),
@@ -360,23 +360,35 @@ class Component:
         self.heat(results)
         thresholded = apply_threshold(self.get_heatmap(),20)
         self.labels = label(thresholded)
-        # draw_labeled_bboxes(self.mainwindow, self.labels)
+        draw_labeled_bboxes(self.mainwindow, self.labels)
 
 
     def get_out_img(self):
         bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
-        heat_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
+        cmap = plt.get_cmap('hot')
+        rgba_img = scale(cmap(self.get_heatmap()))
+        rgb_img = np.delete(rgba_img, 3, 2)
+        hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
+        hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
                               tuple(np.array(image.shape[:2][::-1])//2))
-        outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow, np.hstack((bbox_img,heat_img)))), np.vstack((heat_img, heat_img, heat_img)))), tuple(np.array(self.image.shape[:2][::-1])))
+        outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
+                                                    np.hstack((bbox_img,
+                                                               hot2_img)))),
+                                         np.vstack((hot1_img,
+                                                    hot2_img,
+                                                    hot2_img)))),
+                              tuple(np.array(self.image.shape[:2][::-1])))
         cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         return outp_img
 
 
     def grid(self, num):
-        return list(random_scan3(self.image, self.image.shape[1]//4, num, minr=image.shape[0]//3,
-                                    mintheta=0,
-                                    maxtheta=math.pi))
+        return list(random_scan3(self.image,
+                                 self.image.shape[1]//4,
+                                 num, minr=image.shape[0]//2,
+                                 mintheta=0,
+                                 maxtheta=math.pi))
 
 
     def addboxes(self, bboxwindow, grid):
