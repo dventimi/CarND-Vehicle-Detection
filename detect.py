@@ -30,7 +30,7 @@ plt.ion()
 
 feed = lambda pattern, y: ((f, y) for f in glob(pattern))
 shuffle = lambda l: sample(l, len(l))
-scale = lambda img: (img/np.max(img)*255).astype(np.uint8)
+scale = lambda img,maxval=None: (img/np.max(img)*255).astype(np.uint8) if maxval==None else (img/np.max(img)*maxval).astype(np.uint8)
 load = lambda g: ((mpimg.imread(x[0]),x[1]) for x in g)
 flip = lambda g: ((x[0][:,::-1,:],x[1]) for x in g)
 mirror = lambda g: chain(g, flip(g))
@@ -50,6 +50,7 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
+Theta.threshold = 20
 
 def extract_features(img):
     img = scale(img)
@@ -358,7 +359,7 @@ class Component:
         self.addboxes(self.bboxwindow, grid)
         results = self.sample(self.mainwindow, grid)
         self.heat(results)
-        thresholded = apply_threshold(self.get_heatmap(),20)
+        thresholded = apply_threshold(self.get_heatmap(),Theta.threshold)
         self.labels = label(thresholded)
         draw_labeled_bboxes(self.mainwindow, self.labels)
 
@@ -366,7 +367,7 @@ class Component:
     def get_out_img(self):
         bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
         cmap = plt.get_cmap('hot')
-        rgba_img = scale(cmap(self.get_heatmap()))
+        rgba_img = scale(cmap(self.get_heatmap()),Theta.threshold)
         rgb_img = np.delete(rgba_img, 3, 2)
         hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
         hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
@@ -426,11 +427,11 @@ def Vehicle(Component):
 
 
 builtins.__dict__.update(locals())
-in_clip = VideoFileClip("test_video.mp4")
+in_clip = VideoFileClip("project_video.mp4")
 try:
     pool = Pool(8)
     scene = Component(pool, in_clip, scale(mpimg.imread("test_images/test1.jpg")))
-    scene.write_videofile("output_images/test_output.mp4")
+    scene.write_videofile("output_images/project_output.mp4")
 finally:
     pool.close()
     pool.join()
