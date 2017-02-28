@@ -147,6 +147,10 @@ def draw_labeled_bboxes(img, labels):
                 (np.max(nonzerox), np.max(nonzeroy)))
         center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
                   np.mean((np.min(nonzeroy), np.max(nonzeroy))))
+        list(random_scan3(img, img.shape[1]//4,
+                          1000,
+                          maxr=bbox[1][0]-bbox[0][0],
+                          origin=center))
         cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
         cv2.putText(img, "Car: %s" % car_number,
                     (bbox[0][0],bbox[0][1]-20),
@@ -222,17 +226,24 @@ print("Number of windows: %s" %
 mpimg.imsave("output_images/random-scan2.png", image, format="png")
 
 
-def random_scan3(img,size,num=100):
-    p = np.random.rand(num,2)
-    p[:,0]*=image.shape[1]
-    p[:,1]*=math.pi*2
-    p = p[p[:,0]>image.shape[0]//3]
-    p = p[p[:,1]>0]
-    p = p[p[:,1]<math.pi]
-    s = (size//2*p[:,0]/image.shape[1]).astype('int')
-    x,y=zip(*np.dstack((image.shape[1]//2+p[:,0]*np.cos(p[:,1]), image.shape[0]//2+p[:,0]*np.sin(p[:,1]))).astype('int')[0])
+def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=None,origin=None):
+    if origin==None:
+        origin = tuple(np.array(image.shape[:2][::-1])//2)
+    polar = np.random.rand(num,2)
+    polar[:,0]*=image.shape[1]
+    polar[:,1]*=math.pi*2
+    if not minr==None:
+        polar = polar[polar[:,0]>=minr]
+    if not maxr==None:
+        polar = polar[polar[:,0]<maxr]
+    if not mintheta==None:
+        polar = polar[polar[:,1]>=0]
+    if not maxtheta==None:
+        polar = polar[polar[:,1]<maxtheta]
+    s = (size//2*polar[:,0]/image.shape[1]).astype('int')
+    x,y=zip(*np.dstack((origin[0]+polar[:,0]*np.cos(polar[:,1]), origin[1]+polar[:,0]*np.sin(polar[:,1]))).astype('int')[0])
     grid = ([(c[0]-c[2],c[1]-c[2]), (c[0]+c[2],c[1]+c[2])] for c in zip(x,y,s))
-    box = (0,img.shape[1],(img.shape[0]//2),670)
+    box = (0,img.shape[1],(0),670)
     grid = filter(lambda x: clip_window(x, box), grid)
     return grid
     
@@ -241,7 +252,11 @@ image = scale(mpimg.imread("test_images/test1.jpg"))
 print("Number of windows: %s" %
       len(list(map(lambda w: draw_window(image, w[:2]),
                    chain(
-                       random_scan3(image,image.shape[1]//4,3000)
+                       random_scan3(image,image.shape[1]//4,
+                                    3000,
+                                    minr=image.shape[0]//3,
+                                    mintheta=0,
+                                    maxtheta=math.pi)
                    )))))
 mpimg.imsave("output_images/random-scan3.png", image, format="png")
 
@@ -323,8 +338,8 @@ class Component:
         return self.heatmap
 
 
-    def sample(self, pool, mainwindow, grid):
-        results = pool.map(process, get_patches(mainwindow, grid))
+    def sample(self, mainwindow, grid):
+        results = self.pool.map(process, get_patches(mainwindow, grid))
         return results
 
 
@@ -333,7 +348,6 @@ class Component:
         for s in samples:
             self.heatmap[s[0][1]:s[1][1],
                          s[0][0]:s[1][0]] += 1
-        # list(map(lambda x: heatmap[s[0][1]:s[1][1], s[0][0]:s[1][0]] += 1, samples))
 
 
     def evolve(self, image):
@@ -342,11 +356,11 @@ class Component:
         self.bboxwindow = np.copy(image)
         grid = self.grid(1000)
         self.addboxes(self.bboxwindow, grid)
-        results = self.sample(self.pool, self.mainwindow, grid)
+        results = self.sample(self.mainwindow, grid)
         self.heat(results)
         thresholded = apply_threshold(self.get_heatmap(),20)
         self.labels = label(thresholded)
-        draw_labeled_bboxes(self.mainwindow, labels)
+        # draw_labeled_bboxes(self.mainwindow, self.labels)
 
 
     def get_out_img(self):
@@ -360,7 +374,9 @@ class Component:
 
 
     def grid(self, num):
-        return list(random_scan3(self.image, self.image.shape[1]//4, num))
+        return list(random_scan3(self.image, self.image.shape[1]//4, num, minr=image.shape[0]//3,
+                                    mintheta=0,
+                                    maxtheta=math.pi))
 
 
     def addboxes(self, bboxwindow, grid):
@@ -389,6 +405,12 @@ class Component:
 
     def write_videofile(self, filename):
         self.out_clip.write_videofile(filename, audio=False)
+
+
+def Vehicle(Component):
+    def grid(self, num):
+        return list(random_scan3(self.image, self.image.shape[1]//4, num))
+        
 
 
 builtins.__dict__.update(locals())
