@@ -348,6 +348,7 @@ class Component:
         self.cool()
         self.mainwindow = np.copy(image)
         self.bboxwindow = np.copy(image)
+        self.chld_img = np.dstack([self.flat, self.flat, self.flat])
         grid = self.grid(1000)
         self.addboxes(self.bboxwindow, grid)
         results = self.sample(self.mainwindow, grid)
@@ -363,16 +364,17 @@ class Component:
     def get_out_img(self):
         bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
         cmap = plt.get_cmap('hot')
-        rgba_img = scale(cmap(self.get_heatmap()),Theta.threshold)
+        rgba_img = scale(cmap(self.get_heatmap()),128)
         rgb_img = np.delete(rgba_img, 3, 2)
         hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
         hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
                               tuple(np.array(image.shape[:2][::-1])//2))
+        chld_img = cv2.resize(self.chld_img, tuple(np.array(image.shape[:2][::-1])//2))
         outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
                                                     np.hstack((bbox_img,
                                                                hot2_img)))),
                                          np.vstack((hot1_img,
-                                                    hot2_img,
+                                                    chld_img,
                                                     hot2_img)))),
                               tuple(np.array(self.image.shape[:2][::-1])))
         cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
@@ -412,10 +414,10 @@ class Component:
                 r1 = c.get_size()//2
                 dist = int(math.sqrt(sum([(c1[0]-image.shape[1]//2)**2,
                                           (c1[1]-image.shape[0]//2)**2])))
-                if dist<=size:
+                if dist<=image.shape[1]:
                     overlaps+=[c]
             if len(overlaps)==0:
-                spawned+=[Vehicle(self.pool, self.image, 128, center)]
+                spawned+=[Vehicle(self, self.pool, self.image, 128, center)]
         self.children+=spawned
 
 
@@ -425,17 +427,20 @@ class Component:
 
 
 class Vehicle(Component):
-    def __init__(self, pool, img, size=None, center=None):
+    def __init__(self, scene, pool, img, size=None, center=None):
         super().__init__(pool, img, center, size)
+        self.scene = scene
     
     def grid(self, num):
         return list(random_scan3(self.image, self.image.shape[1]//32, center=self.center, maxr=self.image.shape[1]//8, num=1000, scale=False))
         
-    def evolve(self, image):
+    def evolve(self, image, chld_img=None):
         self.cool()
         grid = self.grid(1000)
         results = self.sample(image, grid)
-        # self.heat(results)
+        self.addboxes(scene.bboxwindow, grid)
+        self.addboxes(scene.chld_img, grid)
+        self.heat(results)
 
 
 builtins.__dict__.update(locals())
