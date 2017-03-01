@@ -50,7 +50,8 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 10
+Theta.threshold = 1
+Theta.numwindows = 100
 
 def extract_features(img):
     img = scale(img)
@@ -349,7 +350,7 @@ class Component:
         self.mainwindow = np.copy(image)
         self.bboxwindow = np.copy(image)
         self.chld_img = np.dstack([self.flat, self.flat, self.flat])
-        grid = self.grid(1000)
+        grid = self.grid(Theta.numwindows)
         self.addboxes(self.bboxwindow, grid)
         results = self.sample(self.mainwindow, grid)
         self.heat(results)
@@ -432,15 +433,26 @@ class Vehicle(Component):
         self.scene = scene
     
     def grid(self, num):
-        return list(random_scan3(self.image, self.image.shape[1]//32, center=self.center, maxr=self.image.shape[1]//8, num=1000, scale=False))
+        return list(random_scan3(self.image, self.image.shape[1]//32, center=self.center, maxr=self.image.shape[1]//16, num=Theta.numwindows, scale=False))
         
     def evolve(self, image, chld_img=None):
         self.cool()
-        grid = self.grid(1000)
+        grid = self.grid(Theta.numwindows)
         results = self.sample(image, grid)
         self.addboxes(scene.bboxwindow, grid)
         self.addboxes(scene.chld_img, grid)
         self.heat(results)
+        thresholded = apply_threshold(self.heatmap,1)
+        labels = label(thresholded)
+        for car_number in range(1, labels[1]+1):
+            nonzero = (labels[0] == car_number).nonzero()
+            nonzeroy = np.array(nonzero[0])
+            nonzerox = np.array(nonzero[1])
+            bbox = ((np.min(nonzerox), np.min(nonzeroy)),
+                    (np.max(nonzerox), np.max(nonzeroy)))
+            center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
+                      int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
+            self.center = center
 
 
 builtins.__dict__.update(locals())
