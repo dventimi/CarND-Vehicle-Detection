@@ -50,7 +50,7 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 20
+Theta.threshold = 10
 
 def extract_features(img):
     img = scale(img)
@@ -146,12 +146,8 @@ def draw_labeled_bboxes(img, labels):
         nonzerox = np.array(nonzero[1])
         bbox = ((np.min(nonzerox), np.min(nonzeroy)),
                 (np.max(nonzerox), np.max(nonzeroy)))
-        center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
-                  np.mean((np.min(nonzeroy), np.max(nonzeroy))))
-        # list(random_scan3(img, img.shape[1]//4,
-        #                   1000,
-        #                   maxr=bbox[1][0]-bbox[0][0],
-        #                   origin=center))
+        center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
+                  int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
         cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
         cv2.putText(img, "Car: %s" % car_number,
                     (bbox[0][0],bbox[0][1]-20),
@@ -227,9 +223,9 @@ print("Number of windows: %s" %
 mpimg.imsave("output_images/random-scan2.png", image, format="png")
 
 
-def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=None,origin=None):
-    if origin==None:
-        origin = tuple(np.array(image.shape[:2][::-1])//2)
+def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=None,center=None,scale=True):
+    if center==None:
+        center = tuple(np.array(image.shape[:2][::-1])//2)
     polar = np.random.rand(num,2)
     polar[:,0]*=image.shape[1]
     polar[:,1]*=math.pi*2
@@ -241,8 +237,14 @@ def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=Non
         polar = polar[polar[:,1]>=0]
     if not maxtheta==None:
         polar = polar[polar[:,1]<maxtheta]
-    s = (size//2*polar[:,0]/image.shape[1]).astype('int')
-    x,y=zip(*np.dstack((origin[0]+polar[:,0]*np.cos(polar[:,1]), origin[1]+polar[:,0]*np.sin(polar[:,1]))).astype('int')[0])
+    if scale:
+        s = (size//2*polar[:,0]/image.shape[1]).astype('int')
+    else:
+        dist = int(math.sqrt(sum([(center[0]-image.shape[1]//2)**2,
+                                  (center[1]-image.shape[0]//2)**2])))
+        s = [int(size*(dist/(image.shape[1]//2)))]*len(polar)
+    x,y=zip(*np.dstack((center[0]+polar[:,0]*np.cos(polar[:,1]),
+                        center[1]+polar[:,0]*np.sin(polar[:,1]))).astype('int')[0])
     grid = ([(c[0]-c[2],c[1]-c[2]), (c[0]+c[2],c[1]+c[2])] for c in zip(x,y,s))
     box = (0,img.shape[1],(0),670)
     grid = filter(lambda x: clip_window(x, box), grid)
@@ -300,17 +302,9 @@ plt.savefig("output_images/heatmaptest.png")
 
 
 
-
 class Component:
-    def overlap(c1, c2):
-        distance = ((c1.center()[0]-c2.center()[0])**2 +
-                    (c1.center()[1]-c2.center()[1])**2)**0.5
-        return distance < c1.size() + c2.size()
-
-
-    def __init__(self, pool, clip, img, origin=None, size=None):
+    def __init__(self, pool, img, center=None, size=None):
         self.pool = pool
-        self.in_clip = clip
         self.image = img
         self.mainwindow = np.copy(image)
         self.bboxwindow = np.copy(image)
@@ -318,16 +312,15 @@ class Component:
         self.flat = np.zeros_like(image[:,:,0]).astype(np.float)
         self.labels = None
         self.children = []
-        self.origin = origin if origin else tuple(np.array(img.shape[:2][::-1])//2)
+        self.center = center if center else tuple(np.array(img.shape[:2][::-1])//2)
         self.size = size if size else min(img.shape[:2])//2
-        self.out_clip = self.in_clip.fl_image(self.process_image)
 
 
-    def center(self):
+    def get_center(self):
         return self.center
 
 
-    def size(self):
+    def get_size(self):
         return self.size
 
 
@@ -362,6 +355,9 @@ class Component:
         thresholded = apply_threshold(self.get_heatmap(),Theta.threshold)
         self.labels = label(thresholded)
         draw_labeled_bboxes(self.mainwindow, self.labels)
+        self.spawn(image)
+        if len(self.children)>0:
+            list(c.evolve(image) for c in self.children)
 
 
     def get_out_img(self):
@@ -396,9 +392,11 @@ class Component:
         list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
 
 
-    def spawn(self):
-        thresholded = apply_threshold(self.heatmap,1)
+    def spawn(self, image):
+        thresholded = apply_threshold(self.heatmap,Theta.threshold)
         labels = label(thresholded)
+        spawned = []
+
         for car_number in range(1, labels[1]+1):
             nonzero = (labels[0] == car_number).nonzero()
             nonzeroy = np.array(nonzero[0])
@@ -406,9 +404,19 @@ class Component:
             bbox = ((np.min(nonzerox), np.min(nonzeroy)),
                     (np.max(nonzerox), np.max(nonzeroy)))
             size = min(bbox[0][1]-bbox[0][0], bbox[1][1]-bbox[1][0])
-            center = (np.mean((np.min(nonzerox), np.max(nonzerox))),
-                      np.mean((np.min(nonzeroy), np.max(nonzeroy))))
-            center = center
+            center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
+                      int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
+            overlaps = []
+            for c in self.children:
+                c1 = c.get_center()
+                r1 = c.get_size()//2
+                dist = int(math.sqrt(sum([(c1[0]-image.shape[1]//2)**2,
+                                          (c1[1]-image.shape[0]//2)**2])))
+                if dist<=size:
+                    overlaps+=[c]
+            if len(overlaps)==0:
+                spawned+=[Vehicle(self.pool, self.image, 128, center)]
+        self.children+=spawned
 
 
     def process_image(self, image):
@@ -416,22 +424,28 @@ class Component:
         return self.get_out_img()
 
 
-    def write_videofile(self, filename):
-        self.out_clip.write_videofile(filename, audio=False)
-
-
-def Vehicle(Component):
+class Vehicle(Component):
+    def __init__(self, pool, img, size=None, center=None):
+        super().__init__(pool, img, center, size)
+    
     def grid(self, num):
-        return list(random_scan3(self.image, self.image.shape[1]//4, num))
+        return list(random_scan3(self.image, self.image.shape[1]//32, center=self.center, maxr=self.image.shape[1]//8, num=1000, scale=False))
         
+    def evolve(self, image):
+        self.cool()
+        grid = self.grid(1000)
+        results = self.sample(image, grid)
+        # self.heat(results)
 
 
 builtins.__dict__.update(locals())
-in_clip = VideoFileClip("project_video.mp4")
 try:
+    in_clip = VideoFileClip("test_video.mp4")
     pool = Pool(8)
-    scene = Component(pool, in_clip, scale(mpimg.imread("test_images/test1.jpg")))
-    scene.write_videofile("output_images/project_output.mp4")
+    scene = Component(pool, scale(mpimg.imread("test_images/test1.jpg")))
+    out_clip = in_clip.fl_image(scene.process_image)
+    out_clip.write_videofile("output_images/test_output.mp4")
 finally:
     pool.close()
     pool.join()
+    in_clip = None
