@@ -51,9 +51,9 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 20
-Theta.numwindows = 1000
-Theta.cooling_factor = 0.97
+Theta.threshold = 25
+Theta.numwindows = 50
+Theta.cooling_factor = 0.99
 
 def extract_features(img):
     img = scale(img)
@@ -99,6 +99,13 @@ def clip_window(x, box):
                 box[0]<=x[1][0]<=box[1],
                 box[2]<=x[0][1]<=box[3],
                 box[2]<=x[1][1]<=box[3]])==4
+
+
+clip_window2 = lambda x, img: sum([0<=x[0][0]<=image.shape[1],
+                                   0<=x[1][0]<=image.shape[1],
+                                   0<=x[0][1]<=image.shape[0],
+                                   0<=x[1][1]<=image.shape[0]])==4
+
 
 
 def image_plane_scan(img,ny,overlap,scale):
@@ -271,6 +278,140 @@ print("Number of windows: %s" %
                    )))))
 mpimg.imsave("output_images/random-scan3.png", image, format="png")
 
+
+
+crt2cyl = lambda x,y,z: (math.sqrt(x**2+y**2), math.atan2(y,x), z)
+cyl2crt = lambda rho,phi,z: (rho*math.cos(phi), rho*math.sin(phi), z)
+cyl2sph = lambda rho,phi,z: (math.sqrt(rho**2+z**2), math.atan2(rho, z), phi)
+sph2cyl = lambda r,theta,phi: (r*math.sin(theta), phi, r*math.cos(theta))
+crt2sph = lambda x,y,z: (math.sqrt(x**2+y**2+z**2), math.acos(z/math.sqrt(x**2+y**2+z**2)), math.atan2(y,x))
+sph2crt = lambda r,theta,phi: (r*math.sin(theta)*math.cos(phi), r*math.sin(theta)*math.sin(phi), r*math.cos(theta))
+
+
+def get_window(img, x, y, z, horizon=0.5, width=2, height=2):
+    d = 1
+    r,theta,phi = crt2sph(x,y,z)
+    rho2 = d*math.tan(theta)
+    x2,y2 = (rho2*math.cos(phi),rho2*math.sin(phi))
+    center = (int(img.shape[1]*0.5+x2*img.shape[1]//2),
+              int(img.shape[0]*(1-horizon)-y2*img.shape[1]//2))
+    scale = img.shape[1]//2
+    dx = int(width/2*scale/z)
+    dy = int(height/2*scale/z)
+    window = [(center[0]-dx,center[1]-dy), (center[0]+dx,center[1]+dy)] + [(x,y,z)]
+    return window
+
+
+image = scale(mpimg.imread("bbox-example-image.jpg"))
+draw_window(image, get_window(image, 0, 0.0, 1, horizon=0.5, width=2, height=1))
+mpimg.imsave("output_images/windshield.png", image, format="png")
+plt.imshow(image)
+
+image = scale(mpimg.imread("bbox-example-image.jpg"))
+draw_window(image, get_window(image, 4.1, -1.0, 8, horizon=0.28))
+draw_window(image, get_window(image, -10.5, -1.0, 22, horizon=0.28))
+draw_window(image, get_window(image, -6.1, -1.0, 32, horizon=0.28))
+draw_window(image, get_window(image, -0.8, -1.0, 35, horizon=0.28))
+draw_window(image, get_window(image, 3, -1.0, 55, horizon=0.28))
+draw_window(image, get_window(image, -6.1, -1.0, 55, horizon=0.28))
+draw_window(image, get_window(image, -6.1, -1.0, 70, horizon=0.28))
+mpimg.imsave("output_images/bbox-example-image-test.png", image, format="png")
+plt.imshow(image)
+
+
+def zooming_windows(img):
+    def make_frame(t):
+        frame = np.copy(img)
+        z = 2**(t % 5)*5
+        draw_window(frame, get_window(frame,-10.5,-1.0,z,horizon=0.28))
+        draw_window(frame, get_window(frame,-6.1,-1.0,z,horizon=0.28))
+        draw_window(frame, get_window(frame,-0.8,-1.0,z,horizon=0.28))
+        draw_window(frame, get_window(frame,4.1,-1.0,z,horizon=0.28))
+        cv2.putText(frame, "z: %.2f m" % z, (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        return frame
+    return make_frame
+clip = VideoClip(zooming_windows(mpimg.imread('bbox-example-image.jpg')), duration=5)
+clip.write_videofile("output_images/zooming-windows.mp4", fps=25)
+
+
+def get_frame_maker(img, grid):
+    def make_frame(t):
+        frame = np.copy(img)
+        draw_window(frame, grid.__next__()[:2], color=(0,255,255))
+        return frame
+    return make_frame
+
+def sparse_scan(img):
+    grid = np.mgrid[-10:12:2,-1.0:0:2,3:7:1]
+    grid[2,]=2**grid[2,]
+    grid = grid.T.reshape(-1,3)
+    grid = (get_window(img,x[0],x[1],x[2])+[x] for x in grid)
+    grid = filter(lambda x: clip_window2(x, img), grid)
+    return grid
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+print(len(list(map(lambda w: draw_window(image, w[:2]), sparse_scan(image)))))
+mpimg.imsave("output_images/sparse-scan.png", image, format="png")
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+clip = VideoClip(get_frame_maker(image, cycle(random_scan4(image,2))), duration=10)
+clip.write_videofile("output_images/sparse-scan.mp4", fps=25)
+
+def dense_scan(img, h=2,w=2):
+    grid = np.mgrid[-12:14:0.5,-1.0:0:2,5:50:2]
+    grid = grid.T.reshape(-1,3)
+    grid = (get_window(img,x[0],x[1],x[2], height=h, width=w)+[x] for x in grid)
+    grid = filter(lambda x: clip_window2(x, img), grid)
+    return grid
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+print(len(list(map(lambda w: draw_window(image, w[:2]), dense_scan(image)))))
+mpimg.imsave("output_images/dense-scan.png", image, format="png")
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+clip = VideoClip(get_frame_maker(image, cycle(dense_scan(image))), duration=20)
+clip.write_videofile("output_images/dense-scan.mp4", fps=60)
+
+
+
+def random_scan4(img,size,num=100,width=25,left=-12.5):
+    grid = np.random.rand(num,3)
+    grid[:,0]*=width
+    grid[:,1]*=2
+    grid[:,2]*=20
+    grid[:,0]+=left
+    grid[:,1]-=4
+    grid[:,2]+=5
+    grid = grid.astype('int')
+    grid = (get_window(img,x[0],x[1],x[2], height=h, width=w)+[x] for x in grid)
+    grid = filter(lambda x: clip_window2(x, img), grid)
+    return grid
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+print(len(list(map(lambda w: draw_window(image, w[:2]), random_scan4(image,2,1000)))))
+mpimg.imsave("output_images/random-scan4.png", image, format="png")
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+clip = VideoClip(get_frame_maker(image, cycle(random_scan4(image,2,1000))), duration=20)
+clip.write_videofile("output_images/random-scan4.mp4", fps=60)
+
+
+def random_scan5(img,size,num=100):
+    grid = chain(random_scan4(img,size,num//2,width=10,left=-15),
+                 random_scan4(img,size,num//2,width=10,left=+5))
+    return grid
+
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+print(len(list(map(lambda w: draw_window(image, w[:2]), random_scan5(image,2,1000)))))
+mpimg.imsave("output_images/random-scan5.png", image, format="png")
+
+image = scale(mpimg.imread("test_images/test1.jpg"))
+clip = VideoClip(get_frame_maker(image, cycle(random_scan5(image,2,1000))), duration=20)
+clip.write_videofile("output_images/random-scan5.mp4", fps=60)
+
+
+
 def process(x):
     return (classifier.predict(extract_features(x[0]))[0],x[1])
 
@@ -371,35 +512,39 @@ class Component:
 
 
     def get_out_img(self):
-        # bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
+        bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
         # cmap = plt.get_cmap('hot')
-        # rgba_img = scale(cmap(self.get_heatmap()),128)
+        # rgba_img = scale(cmap(self.get_heatmap()),Theta.threshold)
         # rgb_img = np.delete(rgba_img, 3, 2)
         # hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
-        # hot1_img = rgb_img
-        hot2_img = np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat])
+        hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*Theta.threshold), tuple(np.array(image.shape[:2][::-1])//2))
+        # cv2.putText(hot1_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        cv2.putText(hot2_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        flat_img = cv2.resize(np.dstack([self.flat, self.flat, self.flat]), tuple(np.array(image.shape[:2][::-1])//2))
         # hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
         #                       tuple(np.array(image.shape[:2][::-1])//2))
         # chld_img = cv2.resize(self.chld_img, tuple(np.array(image.shape[:2][::-1])//2))
-        # outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
-        #                                             np.hstack((bbox_img,
-        #                                                        hot2_img)))),
-        #                                  np.vstack((hot1_img,
-        #                                             chld_img,
-        #                                             hot2_img)))),
-        #                       tuple(np.array(self.image.shape[:2][::-1])))
-        # cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
+                                                    np.hstack((flat_img,
+                                                               flat_img)))),
+                                         np.vstack((bbox_img,
+                                                    hot2_img,
+                                                    flat_img)))),
+                              tuple(np.array(self.image.shape[:2][::-1])))
         # cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        return scale(hot2_img, Theta.threshold)
+        return outp_img
 
 
     def grid(self, num):
-        return list(random_scan3(self.image,
-                                 self.image.shape[1]//4,
-                                 num,
-                                 minr=image.shape[0]//4,
-                                 mintheta=0,
-                                 maxtheta=math.pi))
+        return list(random_scan5(self.image,
+                                 2,
+                                 num))
+        # return list(random_scan3(self.image,
+        #                          self.image.shape[1]//4,
+        #                          num,
+        #                          minr=image.shape[0]//4,
+        #                          mintheta=0,
+        #                          maxtheta=math.pi))
 
 
     def addboxes(self, bboxwindow, grid):
