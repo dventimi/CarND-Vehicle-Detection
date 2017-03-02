@@ -23,14 +23,15 @@ import matplotlib.image as mpimg
 import matplotlib.pyplot as plt
 import numpy as np
 import pdb
+import pickle
 import time
 import timeit
 
-plt.ion()
+# plt.ion()
 
 feed = lambda pattern, y: ((f, y) for f in glob(pattern))
 shuffle = lambda l: sample(l, len(l))
-scale = lambda img,maxval=None: (img/np.max(img)*255).astype(np.uint8) if maxval==None else (img/np.max(img)*maxval).astype(np.uint8)
+scale = lambda img,maxval=None: (img/np.max(img)*255).astype(np.uint8) if maxval==None else (img/maxval*255).astype(np.uint8)
 load = lambda g: ((mpimg.imread(x[0]),x[1]) for x in g)
 flip = lambda g: ((x[0][:,::-1,:],x[1]) for x in g)
 mirror = lambda g: chain(g, flip(g))
@@ -50,8 +51,9 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 1
-Theta.numwindows = 100
+Theta.threshold = 20
+Theta.numwindows = 1000
+Theta.cooling_factor = 0.97
 
 def extract_features(img):
     img = scale(img)
@@ -67,18 +69,20 @@ def extract_features(img):
     return s.transform(X)
 
 
-def get_classifier(X, y):
-    svc = LinearSVC()
-    svc.fit(X, y)
+def get_classifier(reload=False):
+    if reload:
+        samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
+        data = cycle(mirror(load(shuffle(samples))))
+        X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=Theta.test_size, random_state=np.random.randint(0, 100))
+        svc = LinearSVC()
+        svc.fit(X, y)
+        pickle.dump(svc, open("save.p","wb"))
+        print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
+    else:
+        svc = pickle.load(open("save.p", "rb"))
     return svc
 
-
-samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
-data = cycle(mirror(load(shuffle(samples))))
-
-X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=Theta.test_size, random_state=np.random.randint(0, 100))
-classifier = get_classifier(X_train,y_train)
-print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
+classifier = get_classifier()
 
 def draw_window(img, bbox, color=(0,0,255), thick=3):
     cv2.rectangle(img, bbox[0], bbox[1], color, thick)
@@ -241,9 +245,12 @@ def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=Non
     if scale:
         s = (size//2*polar[:,0]/image.shape[1]).astype('int')
     else:
-        dist = int(math.sqrt(sum([(center[0]-image.shape[1]//2)**2,
-                                  (center[1]-image.shape[0]//2)**2])))
-        s = [int(size*(dist/(image.shape[1]//2)))]*len(polar)
+        try:
+            dist = int(math.sqrt(sum([(center[0]-image.shape[1]//2)**2,
+                                      (center[1]-image.shape[0]//2)**2])))
+            s = [int(size*(dist/(image.shape[1]//2)))]*len(polar)
+        except:
+            pdb.set_trace()
     x,y=zip(*np.dstack((center[0]+polar[:,0]*np.cos(polar[:,1]),
                         center[1]+polar[:,0]*np.sin(polar[:,1]))).astype('int')[0])
     grid = ([(c[0]-c[2],c[1]-c[2]), (c[0]+c[2],c[1]+c[2])] for c in zip(x,y,s))
@@ -326,7 +333,7 @@ class Component:
 
 
     def cool(self):
-        self.heatmap*=0.98
+        self.heatmap*=Theta.cooling_factor
 
 
     def get_heatmap(self):
@@ -334,7 +341,8 @@ class Component:
 
 
     def sample(self, mainwindow, grid):
-        results = self.pool.map(process, get_patches(mainwindow, grid))
+        # results = self.pool.map(process, get_patches(mainwindow, grid))
+        results = map(process, get_patches(mainwindow, grid))
         return results
 
 
@@ -357,36 +365,39 @@ class Component:
         thresholded = apply_threshold(self.get_heatmap(),Theta.threshold)
         self.labels = label(thresholded)
         draw_labeled_bboxes(self.mainwindow, self.labels)
-        self.spawn(image)
-        if len(self.children)>0:
-            list(c.evolve(image) for c in self.children)
+        # self.spawn(image)
+        # if len(self.children)>0:
+        #     list(c.evolve(image) for c in self.children)
 
 
     def get_out_img(self):
-        bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
-        cmap = plt.get_cmap('hot')
-        rgba_img = scale(cmap(self.get_heatmap()),128)
-        rgb_img = np.delete(rgba_img, 3, 2)
-        hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
-        hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
-                              tuple(np.array(image.shape[:2][::-1])//2))
-        chld_img = cv2.resize(self.chld_img, tuple(np.array(image.shape[:2][::-1])//2))
-        outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
-                                                    np.hstack((bbox_img,
-                                                               hot2_img)))),
-                                         np.vstack((hot1_img,
-                                                    chld_img,
-                                                    hot2_img)))),
-                              tuple(np.array(self.image.shape[:2][::-1])))
-        cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        return outp_img
+        # bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
+        # cmap = plt.get_cmap('hot')
+        # rgba_img = scale(cmap(self.get_heatmap()),128)
+        # rgb_img = np.delete(rgba_img, 3, 2)
+        # hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
+        # hot1_img = rgb_img
+        hot2_img = np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat])
+        # hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
+        #                       tuple(np.array(image.shape[:2][::-1])//2))
+        # chld_img = cv2.resize(self.chld_img, tuple(np.array(image.shape[:2][::-1])//2))
+        # outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
+        #                                             np.hstack((bbox_img,
+        #                                                        hot2_img)))),
+        #                                  np.vstack((hot1_img,
+        #                                             chld_img,
+        #                                             hot2_img)))),
+        #                       tuple(np.array(self.image.shape[:2][::-1])))
+        # cv2.putText(outp_img, "Max: %.2f" % np.max(self.get_heatmap()), (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        # cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+        return scale(hot2_img, Theta.threshold)
 
 
     def grid(self, num):
         return list(random_scan3(self.image,
                                  self.image.shape[1]//4,
-                                 num, minr=image.shape[0]//2,
+                                 num,
+                                 minr=image.shape[0]//4,
                                  mintheta=0,
                                  maxtheta=math.pi))
 
@@ -415,7 +426,7 @@ class Component:
                 r1 = c.get_size()//2
                 dist = int(math.sqrt(sum([(c1[0]-image.shape[1]//2)**2,
                                           (c1[1]-image.shape[0]//2)**2])))
-                if dist<=image.shape[1]:
+                if dist<=10*r1:
                     overlaps+=[c]
             if len(overlaps)==0:
                 spawned+=[Vehicle(self, self.pool, self.image, 128, center)]
@@ -442,7 +453,7 @@ class Vehicle(Component):
         self.addboxes(scene.bboxwindow, grid)
         self.addboxes(scene.chld_img, grid)
         self.heat(results)
-        thresholded = apply_threshold(self.heatmap,1)
+        thresholded = apply_threshold(self.heatmap,20)
         labels = label(thresholded)
         for car_number in range(1, labels[1]+1):
             nonzero = (labels[0] == car_number).nonzero()
@@ -453,16 +464,25 @@ class Vehicle(Component):
             center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
                       int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
             self.center = center
+            self.size = min(bbox[1][0]-bbox[0][0],
+                            bbox[1][1]-bbox[1][0])
 
 
 builtins.__dict__.update(locals())
 try:
-    in_clip = VideoFileClip("test_video.mp4")
+    in_clip = VideoFileClip("project_video.mp4")
     pool = Pool(8)
     scene = Component(pool, scale(mpimg.imread("test_images/test1.jpg")))
     out_clip = in_clip.fl_image(scene.process_image)
-    out_clip.write_videofile("output_images/test_output.mp4")
+    # out_clip.write_videofile("output_images/test_output.mp4", audio=False)
+    cProfile.run('out_clip.write_videofile("output_images/project_output.mp4", audio=False)', 'restats')
 finally:
     pool.close()
     pool.join()
     in_clip = None
+
+
+import pstats
+p = pstats.Stats('restats')
+p.sort_stats('time').print_stats(100)
+p.sort_stats('cumulative').print_stats(100)
