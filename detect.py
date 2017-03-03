@@ -51,9 +51,9 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 25
-Theta.numwindows = 50
-Theta.cooling_factor = 0.99
+Theta.threshold = 30
+Theta.numwindows = 100
+Theta.cooling_factor = 0.97
 
 def extract_features(img):
     img = scale(img)
@@ -354,7 +354,7 @@ print(len(list(map(lambda w: draw_window(image, w[:2]), sparse_scan(image)))))
 mpimg.imsave("output_images/sparse-scan.png", image, format="png")
 
 image = scale(mpimg.imread("test_images/test1.jpg"))
-clip = VideoClip(get_frame_maker(image, cycle(random_scan4(image,2))), duration=10)
+clip = VideoClip(get_frame_maker(image, cycle(sparse_scan(image))), duration=10)
 clip.write_videofile("output_images/sparse-scan.mp4", fps=25)
 
 def dense_scan(img, h=2,w=2):
@@ -364,6 +364,7 @@ def dense_scan(img, h=2,w=2):
     grid = filter(lambda x: clip_window2(x, img), grid)
     return grid
 
+
 image = scale(mpimg.imread("test_images/test1.jpg"))
 print(len(list(map(lambda w: draw_window(image, w[:2]), dense_scan(image)))))
 mpimg.imsave("output_images/dense-scan.png", image, format="png")
@@ -372,20 +373,20 @@ image = scale(mpimg.imread("test_images/test1.jpg"))
 clip = VideoClip(get_frame_maker(image, cycle(dense_scan(image))), duration=20)
 clip.write_videofile("output_images/dense-scan.mp4", fps=60)
 
-
-
 def random_scan4(img,size,num=100,width=25,left=-12.5):
     grid = np.random.rand(num,3)
     grid[:,0]*=width
     grid[:,1]*=2
-    grid[:,2]*=20
+    grid[:,1]-=2
+    grid[:,2]*=40
     grid[:,0]+=left
     grid[:,1]-=4
     grid[:,2]+=5
     grid = grid.astype('int')
-    grid = (get_window(img,x[0],x[1],x[2], height=h, width=w)+[x] for x in grid)
+    grid = (get_window(img,x[0],x[1],x[2], height=4, width=4)+[x] for x in grid)
     grid = filter(lambda x: clip_window2(x, img), grid)
     return grid
+
 
 image = scale(mpimg.imread("test_images/test1.jpg"))
 print(len(list(map(lambda w: draw_window(image, w[:2]), random_scan4(image,2,1000)))))
@@ -397,8 +398,8 @@ clip.write_videofile("output_images/random-scan4.mp4", fps=60)
 
 
 def random_scan5(img,size,num=100):
-    grid = chain(random_scan4(img,size,num//2,width=10,left=-15),
-                 random_scan4(img,size,num//2,width=10,left=+5))
+    grid = chain(random_scan4(img,size,num//2,width=20,left=-30),
+                 random_scan4(img,size,num//2,width=20,left=+10))
     return grid
 
 
@@ -503,27 +504,17 @@ class Component:
         self.addboxes(self.bboxwindow, grid)
         results = self.sample(self.mainwindow, grid)
         self.heat(results)
+        self.heatmap = cv2.GaussianBlur(self.heatmap, (31, 31), 0)
         thresholded = apply_threshold(self.get_heatmap(),Theta.threshold)
         self.labels = label(thresholded)
         draw_labeled_bboxes(self.mainwindow, self.labels)
-        # self.spawn(image)
-        # if len(self.children)>0:
-        #     list(c.evolve(image) for c in self.children)
 
 
     def get_out_img(self):
         bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
-        # cmap = plt.get_cmap('hot')
-        # rgba_img = scale(cmap(self.get_heatmap()),Theta.threshold)
-        # rgb_img = np.delete(rgba_img, 3, 2)
-        # hot1_img = cv2.resize(rgb_img, tuple(np.array(image.shape[:2][::-1])//2))
         hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*Theta.threshold), tuple(np.array(image.shape[:2][::-1])//2))
-        # cv2.putText(hot1_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         cv2.putText(hot2_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         flat_img = cv2.resize(np.dstack([self.flat, self.flat, self.flat]), tuple(np.array(image.shape[:2][::-1])//2))
-        # hot2_img = cv2.resize(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]),
-        #                       tuple(np.array(image.shape[:2][::-1])//2))
-        # chld_img = cv2.resize(self.chld_img, tuple(np.array(image.shape[:2][::-1])//2))
         outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
                                                     np.hstack((flat_img,
                                                                flat_img)))),
@@ -531,7 +522,6 @@ class Component:
                                                     hot2_img,
                                                     flat_img)))),
                               tuple(np.array(self.image.shape[:2][::-1])))
-        # cv2.putText(outp_img, "Cars: %s" % self.labels[1], (50,80), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         return outp_img
 
 
@@ -539,78 +529,15 @@ class Component:
         return list(random_scan5(self.image,
                                  2,
                                  num))
-        # return list(random_scan3(self.image,
-        #                          self.image.shape[1]//4,
-        #                          num,
-        #                          minr=image.shape[0]//4,
-        #                          mintheta=0,
-        #                          maxtheta=math.pi))
 
 
     def addboxes(self, bboxwindow, grid):
         list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
 
 
-    def spawn(self, image):
-        thresholded = apply_threshold(self.heatmap,Theta.threshold)
-        labels = label(thresholded)
-        spawned = []
-
-        for car_number in range(1, labels[1]+1):
-            nonzero = (labels[0] == car_number).nonzero()
-            nonzeroy = np.array(nonzero[0])
-            nonzerox = np.array(nonzero[1])
-            bbox = ((np.min(nonzerox), np.min(nonzeroy)),
-                    (np.max(nonzerox), np.max(nonzeroy)))
-            size = min(bbox[0][1]-bbox[0][0], bbox[1][1]-bbox[1][0])
-            center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
-                      int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
-            overlaps = []
-            for c in self.children:
-                c1 = c.get_center()
-                r1 = c.get_size()//2
-                dist = int(math.sqrt(sum([(c1[0]-image.shape[1]//2)**2,
-                                          (c1[1]-image.shape[0]//2)**2])))
-                if dist<=10*r1:
-                    overlaps+=[c]
-            if len(overlaps)==0:
-                spawned+=[Vehicle(self, self.pool, self.image, 128, center)]
-        self.children+=spawned
-
-
     def process_image(self, image):
         self.evolve(image)
         return self.get_out_img()
-
-
-class Vehicle(Component):
-    def __init__(self, scene, pool, img, size=None, center=None):
-        super().__init__(pool, img, center, size)
-        self.scene = scene
-    
-    def grid(self, num):
-        return list(random_scan3(self.image, self.image.shape[1]//32, center=self.center, maxr=self.image.shape[1]//16, num=Theta.numwindows, scale=False))
-        
-    def evolve(self, image, chld_img=None):
-        self.cool()
-        grid = self.grid(Theta.numwindows)
-        results = self.sample(image, grid)
-        self.addboxes(scene.bboxwindow, grid)
-        self.addboxes(scene.chld_img, grid)
-        self.heat(results)
-        thresholded = apply_threshold(self.heatmap,20)
-        labels = label(thresholded)
-        for car_number in range(1, labels[1]+1):
-            nonzero = (labels[0] == car_number).nonzero()
-            nonzeroy = np.array(nonzero[0])
-            nonzerox = np.array(nonzero[1])
-            bbox = ((np.min(nonzerox), np.min(nonzeroy)),
-                    (np.max(nonzerox), np.max(nonzeroy)))
-            center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
-                      int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
-            self.center = center
-            self.size = min(bbox[1][0]-bbox[0][0],
-                            bbox[1][1]-bbox[1][0])
 
 
 builtins.__dict__.update(locals())
@@ -627,7 +554,7 @@ finally:
     in_clip = None
 
 
-import pstats
-p = pstats.Stats('restats')
-p.sort_stats('time').print_stats(100)
-p.sort_stats('cumulative').print_stats(100)
+# import pstats
+# p = pstats.Stats('restats')
+# p.sort_stats('time').print_stats(100)
+# p.sort_stats('cumulative').print_stats(100)
