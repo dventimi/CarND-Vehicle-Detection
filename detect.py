@@ -51,7 +51,7 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 30
+Theta.threshold = 15
 Theta.numwindows = 100
 Theta.cooling_factor = 0.97
 
