@@ -51,9 +51,9 @@ Theta.orient = 9
 Theta.pix_per_cell = 8
 Theta.transform_sqrt = False
 Theta.test_size = 0.2
-Theta.threshold = 15
+Theta.threshold = 25
 Theta.numwindows = 100
-Theta.cooling_factor = 0.97
+Theta.cooling_factor = 0.98
 
 def extract_features(img):
     img = scale(img)
