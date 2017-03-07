@@ -3,7 +3,6 @@ from itertools import groupby, islice, zip_longest, cycle, filterfalse, chain
 from lesson_functions import *
 from moviepy.editor import VideoFileClip, VideoClip
 from mpl_toolkits.mplot3d import Axes3D
-from multiprocessing import Pool
 from random import choice, sample
 from scipy.cluster.vq import kmeans,vq
 from scipy.ndimage.measurements import label
@@ -15,8 +14,6 @@ from sklearn.model_selection import train_test_split
 from sklearn.neighbors.kde import KernelDensity
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
-import builtins
-import cProfile
 import cv2
 import math
 import matplotlib.image as mpimg
@@ -55,25 +52,32 @@ Theta.threshold = 25
 Theta.numwindows = 100
 Theta.cooling_factor = 0.98
 
-def extract_features(img):
+def extract_features(img,
+                     colorspace=Theta.colorspace,
+                     channel=Theta.channel,
+                     orient=Theta.orient,
+                     pix_per_cell=Theta.pix_per_cell,
+                     cell_per_block=Theta.cell_per_block,
+                     transform_sqrt=Theta.transform_sqrt,
+                     feature_vec=Theta.feature_vec):
     img = scale(img)
     X = np.array([])
     X = np.append(X,
-                  hog(cv2.cvtColor(img, Theta.colorspace)[:,:,Theta.channel],
-                      Theta.orient,
-                      (Theta.pix_per_cell,Theta.pix_per_cell),
-                      (Theta.cell_per_block,Theta.cell_per_block),
-                      transform_sqrt = Theta.transform_sqrt,
-                      feature_vector = Theta.feature_vec))
+                  hog(cv2.cvtColor(img, colorspace)[:,:,channel],
+                      orient,
+                      (pix_per_cell,pix_per_cell),
+                      (cell_per_block,cell_per_block),
+                      transform_sqrt = transform_sqrt,
+                      feature_vector = feature_vec))
     s = StandardScaler().fit(X)
     return s.transform(X)
 
 
-def get_classifier(reload=False):
+def get_classifier(reload=False,test_size=0.2):
     if reload:
         samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
         data = cycle(mirror(load(shuffle(samples))))
-        X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=Theta.test_size, random_state=np.random.randint(0, 100))
+        X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=test_size, random_state=np.random.randint(0, 100))
         svc = LinearSVC()
         svc.fit(X, y)
         pickle.dump(svc, open("save.p","wb"))
@@ -424,13 +428,7 @@ grid = list(chain(
     image_plane_scan(image,4,0.750,3),
 ))
 
-builtins.__dict__.update(locals())
-try:
-    pool = Pool(12)
-    results = pool.map(process, get_patches(image, grid))
-finally:
-    pool.close()
-    pool.join()
+results = map(process, get_patches(image, grid))
 
 image = scale(mpimg.imread("test_images/test1.jpg"))
 box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
@@ -453,17 +451,40 @@ plt.savefig("output_images/heatmaptest.png")
 
 
 class Component:
-    def __init__(self, pool, img, center=None, size=None):
-        self.pool = pool
-        self.image = img
-        self.mainwindow = np.copy(image)
+    def __init__(self, img,
+                 cell_per_block = 4,
+                 channel = 2,
+                 colorspace = cv2.COLOR_RGB2HSV,
+                 feature_vec = True,
+                 orient = 9,
+                 pix_per_cell = 8,
+                 transform_sqrt = False,
+                 test_size = 0.2,
+                 threshold = 25,
+                 numwindows = 100,
+                 cooling_factor = 0.98,
+                 center=None,
+                 size=None):
         self.bboxwindow = np.copy(image)
-        self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
-        self.flat = np.zeros_like(image[:,:,0]).astype(np.float)
-        self.labels = None
-        self.children = []
+        self.cell_per_block = 4
         self.center = center if center else tuple(np.array(img.shape[:2][::-1])//2)
+        self.channel = 2
+        self.children = []
+        self.colorspace = cv2.COLOR_RGB2HSV
+        self.cooling_factor = 0.98
+        self.feature_vec = True
+        self.flat = np.zeros_like(image[:,:,0]).astype(np.float)
+        self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
+        self.image = img
+        self.labels = None
+        self.mainwindow = np.copy(image)
+        self.numwindows = 100
+        self.orient = 9
+        self.pix_per_cell = 8
         self.size = size if size else min(img.shape[:2])//2
+        self.test_size = 0.2
+        self.threshold = 25
+        self.transform_sqrt = False
 
 
     def get_center(self):
@@ -475,7 +496,7 @@ class Component:
 
 
     def cool(self):
-        self.heatmap*=Theta.cooling_factor
+        self.heatmap*=self.cooling_factor
 
 
     def get_heatmap(self):
@@ -483,7 +504,6 @@ class Component:
 
 
     def sample(self, mainwindow, grid):
-        # results = self.pool.map(process, get_patches(mainwindow, grid))
         results = map(process, get_patches(mainwindow, grid))
         return results
 
@@ -500,19 +520,19 @@ class Component:
         self.mainwindow = np.copy(image)
         self.bboxwindow = np.copy(image)
         self.chld_img = np.dstack([self.flat, self.flat, self.flat])
-        grid = self.grid(Theta.numwindows)
+        grid = self.grid(self.numwindows)
         self.addboxes(self.bboxwindow, grid)
         results = self.sample(self.mainwindow, grid)
         self.heat(results)
         self.heatmap = cv2.GaussianBlur(self.heatmap, (31, 31), 0)
-        thresholded = apply_threshold(self.get_heatmap(),Theta.threshold)
+        thresholded = apply_threshold(self.get_heatmap(),self.threshold)
         self.labels = label(thresholded)
         draw_labeled_bboxes(self.mainwindow, self.labels)
 
 
     def get_out_img(self):
         bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
-        hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*Theta.threshold), tuple(np.array(image.shape[:2][::-1])//2))
+        hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*self.threshold), tuple(np.array(image.shape[:2][::-1])//2))
         cv2.putText(hot2_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         flat_img = cv2.resize(np.dstack([self.flat, self.flat, self.flat]), tuple(np.array(image.shape[:2][::-1])//2))
         outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
@@ -540,21 +560,20 @@ class Component:
         return self.get_out_img()
 
 
-builtins.__dict__.update(locals())
-try:
-    in_clip = VideoFileClip("project_video.mp4")
-    pool = Pool(8)
-    scene = Component(pool, scale(mpimg.imread("test_images/test1.jpg")))
-    out_clip = in_clip.fl_image(scene.process_image)
-    # out_clip.write_videofile("output_images/test_output.mp4", audio=False)
-    cProfile.run('out_clip.write_videofile("output_images/project_output.mp4", audio=False)', 'restats')
-finally:
-    pool.close()
-    pool.join()
-    in_clip = None
-
-
-# import pstats
-# p = pstats.Stats('restats')
-# p.sort_stats('time').print_stats(100)
-# p.sort_stats('cumulative').print_stats(100)
+in_clip = VideoFileClip("test_video.mp4")
+scene = Component(scale(mpimg.imread("test_images/test1.jpg")),
+                  cell_per_block = Theta.cell_per_block,
+                  channel = Theta.channel,
+                  colorspace = Theta.colorspace,
+                  feature_vec = Theta.feature_vec,
+                  orient = Theta.orient,
+                  pix_per_cell = Theta.pix_per_cell,
+                  transform_sqrt = Theta.transform_sqrt,
+                  test_size = Theta.test_size,
+                  threshold = Theta.threshold,
+                  numwindows = Theta.numwindows,
+                  cooling_factor = Theta.cooling_factor,
+                  center = None,
+                  size = None)
+out_clip = in_clip.fl_image(scene.process_image)
+out_clip.write_videofile("output_images/test_output.mp4", audio=False)
