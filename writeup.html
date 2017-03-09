@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Vehicle Detection Project</title>
-<!-- 2017-03-08 Wed 19:14 -->
+<!-- 2017-03-09 Thu 15:48 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="David A. Ventimiglia" />
@@ -192,23 +192,18 @@ The goals / steps of this project are the following:
 
 <ul class="org-ul">
 <li>Perform a Histogram of Oriented Gradients (HOG) feature extraction
-on a labeled training set of images and train a classifier Linear
-SVM classifier
+on a labeled training set of images and train a Linear SVM
+classifier
 </li>
-<li>Optionally, you can also apply a color transform and append binned
-color features, as well as histograms of color, to your HOG
-feature vector.
+<li>Normalize features and randomize a selection for training and
+testing.
 </li>
-<li>Note: for those first two steps don't forget to normalize your
-features and randomize a selection for training and testing.
+<li>Implement a sliding-window technique and use trained classifier to
+search for vehicles in images.
 </li>
-<li>Implement a sliding-window technique and use your trained
-classifier to search for vehicles in images.
-</li>
-<li>Run your pipeline on a video stream (start with the <code>test_video.mp4</code>
-and later implement on full <code>project_video.mp4</code>) and create a heat
-map of recurring detections frame by frame to reject outliers and
-follow detected vehicles.
+<li>Run pipeline on a video stream and create a heat map of recurring
+detections frame by frame to reject outliers and follow detected
+vehicles.
 </li>
 <li>Estimate a bounding box for vehicles detected.
 </li>
@@ -357,12 +352,20 @@ color space transformation and HOG-features.  Specifically, after
 trying several different color spaces, I settled on the <a href="https://en.wikipedia.org/wiki/HSL_and_HSV">HSV</a> color
 space and then performed HOG feature extraction on just the <i>V</i>
 ("value") channel.  Such a simple feature extractor may seem overly
-simple&#x2014;and perhaps it is&#x2014;but the "proof is in the puding," as
+simple&#x2014;and perhaps it is&#x2014;but the "proof is in the pudding," as
 they say.  It performed well, with decent accuracy on a test sample
 (~98%) and on the project video.  Moreover, it has the virtue of
 requiring relatively few computational resources.  Anything that
 increases performance is a big win, since it promotes rapid,
 <a href="https://en.wikipedia.org/wiki/Iterative_and_incremental_development">iterative</a> experimentation.  
+</p>
+
+<p>
+Moreover, for the HOG parameters (orientations, pixels<sub>per</sub><sub>cell</sub>,
+cells<sub>per</sub><sub>block</sub>), I started with the values that we used in the
+quizzes in the lectures, and then manually tuned toward better
+values by simple trial-and-error.  Because the classifier seemed to
+do well on the test set, not much tuning was necessary.
 </p>
 
 <p>
@@ -416,7 +419,7 @@ each filename that matches <code>pattern</code>, yielding <a href="https://docs.
 array, either by the maximum value in the array or by a
 supplied parameter <code>maxval</code>
 </dd>
-<dt> load </dt><dd>generator function over a sequnce of <a href="https://en.wikipedia.org/wiki/Ordered_pair">ordered pairs</a> in
+<dt> load </dt><dd>generator function over a sequence of <a href="https://en.wikipedia.org/wiki/Ordered_pair">ordered pairs</a> in
 which the first element is an image filename and the
 second is any value (perhaps provided by the <code>feed</code>
 function above), which loads the image files into NumPy
@@ -429,7 +432,7 @@ across a vertical axis) and producing a mirror image
 </dd>
 <dt> mirror </dt><dd>generator function over a sequence of ordered pairs as
 in <code>flip</code>, but which yields first the entire sequence
-unchanged and then the entire sequnce again but with the
+unchanged and then the entire sequence again but with the
 images flipped
 </dd>
 </dl>
@@ -614,7 +617,7 @@ Training a classifier now is as simple as
 
 <div class="org-src-container">
 
-<pre class="src src-python"><span style="color: #fcaf3e;">classifier</span> = get_classifier(<span style="color: #e9b2e3;">True</span>)
+<pre class="src src-python"><span style="color: #73d216;"># </span><span style="color: #73d216;">classifier = get_classifier(True)</span>
 </pre>
 </div>
 
@@ -665,9 +668,9 @@ meters above the road.
 <li>The camera is placed approximately 1 meter behind the windshield's
 center, with a line-of-sight (LOS) perpendicular to it.
 </li>
-<li>The grid coordinages \(\left( x, y, z \right)_{grid}\) correspond to
+<li>The grid coordinates \(\left( x, y, z \right)_{grid}\) correspond to
 the horizontal position across the road, the vertical position
-above the road, and the logitudinal position down the road.
+above the road, and the longitudinal position down the road.
 </li>
 <li>Positive \(x\) values are to the right, negative \(x\) values are to
 the left, and \(x_{grid} \in \left[ -15, 15 \right]\).
@@ -688,7 +691,7 @@ detections on image patches can then be assigned real-world
 coordinates \((x, y, z)\), or at least road coordinates \((x,
   z)_{y=0}\), a real-world "heat map" can be built up, and then
 individual vehicles can be identified either with conventional
-thresholds + <a href="http://scikit-image.org/docs/dev/auto_examples/segmentation/plot_label.html">labelling</a>, with a <a href="https://en.wikipedia.org/wiki/Blob_detection">Laplace-of-Gaussian</a> technique, or
+thresholds + <a href="http://scikit-image.org/docs/dev/auto_examples/segmentation/plot_label.html">labeling</a>, with a <a href="https://en.wikipedia.org/wiki/Blob_detection">Laplace-of-Gaussian</a> technique, or
 with <a href="https://docs.scipy.org/doc/scipy-0.18.1/reference/cluster.vq.html"><i>k</i>-means clustering</a>.
 </p>
 
@@ -757,7 +760,7 @@ size and shape of the image.
 Next, the <code>draw_window</code> function annotates an image <code>img</code> with the
 window <code>bbox</code>.  This does not factor into the actual vehicle
 detection, of course, but the visualization is valuable for
-understanding how the video processsing pipeline ultimately is
+understanding how the video processing pipeline ultimately is
 working.
 </p>
 
@@ -772,7 +775,7 @@ working.
 <p>
 For example, first we draw a window box that roughly corresponds to
 the windshield itself, using a test image from the lecture notes.
-The windshield's center is at real-world coordinages
+The windshield's center is at real-world coordinates
 \((x,y,z)_{windshield} = (0,0,1)\).
 </p>
 
@@ -794,7 +797,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/windshield.png"</span>
 Next, we draw window boxes around a few of the cars in the image.
 Note that here we are eschewing the default value of <code>horizon</code> in
 favor of <code>0.28</code>, given the peculiar tilt the camera seems to have in
-this image.  That value, like the real-world vehicle coordintes
+this image.  That value, like the real-world vehicle coordinates
 \((x,y,z)_i\), were obtained by hand through trial-and-error.
 </p>
 
@@ -836,13 +839,17 @@ handful of windows receding into the distance.
         cv2.putText(frame, <span style="color: #e9b96e;">"z: %.2f m"</span> % z, (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         <span style="color: #b4fa70;">return</span> frame
     <span style="color: #b4fa70;">return</span> make_frame
+</pre>
+</div>
 
-<span style="color: #fcaf3e;">clip</span> = VideoClip(zooming_windows(mpimg.imread(<span style="color: #e9b96e;">'bbox-example-image.jpg'</span>)), duration=5)
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #fcaf3e;">clip</span> = VideoClip(zooming_windows(mpimg.imread(<span style="color: #e9b96e;">'bbox-example-image.jpg'</span>)), duration=5)
 clip.write_videofile(<span style="color: #e9b96e;">"output_images/zooming-windows.mp4"</span>, fps=25)
 </pre>
 </div>
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/lqp9rOSPVrc" frameborder="0" allowfullscreen></iframe>
+<iframe width="800" height="450" src="https://www.youtube.com/embed/lqp9rOSPVrc" frameborder="0" allowfullscreen></iframe>
 
 <p>
 This is just for visualization.  For vehicle detection, a denser
@@ -895,7 +902,7 @@ With these tools, first we define a "sparse grid"
     <span style="color: #fcaf3e;">grid</span>[2,]=2**grid[2,]
     <span style="color: #fcaf3e;">grid</span> = grid.T.reshape(-1,3)
     <span style="color: #fcaf3e;">grid</span> = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] <span style="color: #b4fa70;">for</span> x <span style="color: #b4fa70;">in</span> grid)
-    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, img), grid)
+    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, (0, img.shape[1], (img.shape[0]//2), img.shape[0])), grid)
     <span style="color: #b4fa70;">return</span> grid
 </pre>
 </div>
@@ -913,7 +920,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/sparse-scan.png"</span
 </div>
 
 <pre class="example">
-40
+52
 </pre>
 
 
@@ -933,7 +940,7 @@ clip.write_videofile(<span style="color: #e9b96e;">"output_images/sparse-scan.mp
 </pre>
 </div>
 
-<iframe width="560" height="315" src="https://www.youtube.com/embed/Vn1HxPRd2W0" frameborder="0" allowfullscreen></iframe>
+<iframe width="800" height="450" src="https://www.youtube.com/embed/Vn1HxPRd2W0" frameborder="0" allowfullscreen></iframe>
 
 <p>
 We can also define a "dense grid" with more windows, scanning the
@@ -947,7 +954,7 @@ skip the animation this time, as it is rather boring.
     <span style="color: #fcaf3e;">grid</span> = np.mgrid[-15:15:0.5,-1.0:0:2,10:100:2]
     <span style="color: #fcaf3e;">grid</span> = grid.T.reshape(-1,3)
     <span style="color: #fcaf3e;">grid</span> = (get_window(img,x[0],x[1],x[2], horizon=0.28, height=h, width=w)+[x] <span style="color: #b4fa70;">for</span> x <span style="color: #b4fa70;">in</span> grid)
-    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, img), grid)
+    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, (0, img.shape[1], (img.shape[0]//2), img.shape[0])), grid)
     <span style="color: #b4fa70;">return</span> grid
 </pre>
 </div>
@@ -988,7 +995,7 @@ road, where new cars are likely to come on-stage.
     <span style="color: #fcaf3e;">grid</span> = grid.T.reshape(-1,3)
     <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">list</span>(<span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: <span style="color: #b4fa70;">not</span> (-4&lt;=x[0]&lt;=4 <span style="color: #b4fa70;">and</span> 5&lt;=x[2]&lt;=40), grid))
     <span style="color: #fcaf3e;">grid</span> = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] <span style="color: #b4fa70;">for</span> x <span style="color: #b4fa70;">in</span> grid)
-    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, img), grid)
+    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, (0, img.shape[1], (img.shape[0]//2), img.shape[0])), grid)
     <span style="color: #b4fa70;">return</span> grid
 </pre>
 </div>
@@ -1059,7 +1066,7 @@ of the window patches on an image.
 </pre>
 
 <p>
-To visulize where vehicle detections have occurred on our dense grid
+To visualize where vehicle detections have occurred on our dense grid
 over the road, we filter the processed results that have a value
 greater than 1 (i.e., a detection has occurred for that window patch)
 </p>
@@ -1067,10 +1074,15 @@ greater than 1 (i.e., a detection has occurred for that window patch)
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #fcaf3e;">_</span>,<span style="color: #fcaf3e;">r</span> = <span style="color: #e090d7;">zip</span>(*<span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: x[0]&gt;0, results))
-<span style="color: #fcaf3e;">x</span>,<span style="color: #fcaf3e;">y</span>,<span style="color: #fcaf3e;">z</span> = <span style="color: #e090d7;">zip</span>(*r)
-plt.scatter(x,z,s=10,c=y)
+<span style="color: #fcaf3e;">_</span>,<span style="color: #fcaf3e;">_</span>,<span style="color: #fcaf3e;">cen</span>,<span style="color: #fcaf3e;">_</span> = <span style="color: #e090d7;">zip</span>(*r)
+<span style="color: #fcaf3e;">x</span>,<span style="color: #fcaf3e;">y</span>,<span style="color: #fcaf3e;">z</span> = <span style="color: #e090d7;">zip</span>(*cen)
+plt.scatter(x,z,s=50,c=y)
 </pre>
 </div>
+
+<pre class="example">
+&gt;&gt;&gt; &gt;&gt;&gt; &lt;matplotlib.collections.PathCollection object at 0x7f8fb84b2710&gt;
+</pre>
 
 
 <div class="figure">
@@ -1121,7 +1133,7 @@ functions we desire.
 
 <p>
 First up is a simple "image-plane scan", which carpets the image
-plane in a uniform grid of windows at varous fixed scales.
+plane in a uniform grid of windows at various fixed scales.
 </p>
 
 <div class="org-src-container">
@@ -1143,8 +1155,12 @@ plane in a uniform grid of windows at varous fixed scales.
     <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, box1), grid)
     <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, box2), grid)
     <span style="color: #b4fa70;">return</span> grid
+</pre>
+</div>
 
-<span style="color: #fcaf3e;">image</span> = scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>))
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #fcaf3e;">image</span> = scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>))
 <span style="color: #b4fa70;">print</span>()
 <span style="color: #b4fa70;">print</span>(<span style="color: #e9b96e;">"Number of windows: %s"</span> %
       <span style="color: #e090d7;">len</span>(<span style="color: #e090d7;">list</span>(<span style="color: #e090d7;">map</span>(<span style="color: #b4fa70;">lambda</span> w: draw_window(image, w[:2]),
@@ -1250,8 +1266,12 @@ inefficient and <i>slowww</i>.
     <span style="color: #fcaf3e;">grid</span> = ([(c[1],c[0]),
              (c[1]+size,c[0]+size)] <span style="color: #b4fa70;">for</span> c <span style="color: #b4fa70;">in</span> x[0])
     <span style="color: #b4fa70;">return</span> grid
+</pre>
+</div>
 
-<span style="color: #fcaf3e;">image</span> = scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>))
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #fcaf3e;">image</span> = scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>))
 <span style="color: #b4fa70;">print</span>()
 <span style="color: #b4fa70;">print</span>(<span style="color: #e9b96e;">"Number of windows: %s"</span> %
       <span style="color: #e090d7;">len</span>(<span style="color: #e090d7;">list</span>(<span style="color: #e090d7;">map</span>(<span style="color: #b4fa70;">lambda</span> w: draw_window(image, w[:2]),
@@ -1309,7 +1329,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/random-scan2.png"</spa
 </div>
 
 <pre class="example">
-... ... ... ... ... ... Number of windows: 453
+... ... ... ... ... ... Number of windows: 311
 </pre>
 
 
@@ -1375,7 +1395,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/random-scan3.png"</spa
 </div>
 
 <pre class="example">
-... ... ... ... ... ... ... ... Number of windows: 234
+... ... ... ... ... ... ... ... Number of windows: 199
 </pre>
 
 
@@ -1385,7 +1405,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/random-scan3.png"</spa
 </div>
 
 <p>
-This produces an interestng pattern, but I was not comfortable
+This produces an interesting pattern, but I was not comfortable
 peculiar way the windows are scaled to different sizes, so I wrote
 yet another grid window function <code>random_scan4</code>, which is a bit of a
 hybrid.  It actually re-uses the 3D model described above in
@@ -1422,7 +1442,7 @@ above, rather than laid out in a regular array.
     <span style="color: #fcaf3e;">grid</span>[:,2]+=5
     <span style="color: #fcaf3e;">grid</span> = grid.astype(<span style="color: #e9b96e;">'int'</span>)
     <span style="color: #fcaf3e;">grid</span> = (get_window(img,x[0],x[1],x[2], height=4, width=4)+[x] <span style="color: #b4fa70;">for</span> x <span style="color: #b4fa70;">in</span> grid)
-    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, img), grid)
+    <span style="color: #fcaf3e;">grid</span> = <span style="color: #e090d7;">filter</span>(<span style="color: #b4fa70;">lambda</span> x: clip_window(x, (0, img.shape[1], (img.shape[0]//2), img.shape[0])), grid)
     <span style="color: #b4fa70;">return</span> grid
 </pre>
 </div>
@@ -1436,7 +1456,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/random-scan4.png"</spa
 </div>
 
 <pre class="example">
-822
+813
 </pre>
 
 
@@ -1450,7 +1470,7 @@ Note that the above function takes parameters <code>width</code> and <code>left<
 which set the width of the "ribbon" volume, and its left edge (in
 meters).  We can easily combine a couple calls to this grid
 generating function with judicious parameter choices in order to
-achive interesting search patterns.  For instance, in
+archive interesting search patterns.  For instance, in
 <code>random_scan5</code>, we superimpose two ribbons, one on the left, and one
 on the right, in order just to search the road borders.
 </p>
@@ -1473,7 +1493,7 @@ mpimg.imsave(<span style="color: #e9b96e;">"output_images/random-scan5.png"</spa
 </div>
 
 <pre class="example">
-581
+587
 </pre>
 
 
@@ -1494,6 +1514,50 @@ they naturally scale with distance is revealed.
 <div id="outline-container-sec-6" class="outline-2">
 <h2 id="sec-6">Video Implementation</h2>
 <div class="outline-text-2" id="text-6">
+<p>
+With a variety of strategies for searching a video frame for vehicle
+detection events, the next major step is to adapt those strategies
+into an implementation of a video-processing pipeline.  The
+processing pipeline has these major steps.
+</p>
+
+<ol class="org-ol">
+<li>Get a frame of video.
+</li>
+<li>Generate a grid of windows using one of the schemes developed
+above.
+</li>
+<li>Using the frame image and the grid of windows, generate a
+sequence of patches, which are small (64 x 64 pixel) sub-arrays,
+compatible with our classifier.
+</li>
+<li>Apply the classifier as a stencil over the sequence of patches to
+generate a sequence of detection/non-detection events.
+</li>
+<li>Assign a positive value (1) to the bounding box associated with
+each window/patch, and superimpose these detection patches to
+create a 2D histogram, which we'll call a "heat map."
+</li>
+<li>Apply a threshold to the heat map for each frame, by selecting
+only those array values that exceed the threshold.
+</li>
+<li>Use the <a href="http://scikit-image.org/docs/dev/api/skimage.measure.html#skimage.measure.label"><code>label</code></a> function to identify connected regions in the
+thresholded heat map, and associate these with "vehicles."
+</li>
+<li>Annotate the original frame image with a bounding box for each
+vehicle.
+</li>
+</ol>
+
+<p>
+The previous sections were largely the province of Steps 2, 3, and 4
+above.  Picking up from there with step 5, we need to build up a
+heat map.  The <code>add_heat</code> function does just that.  It takes
+single-channel image array <code>heatmap</code> (typically, all zeros) and a
+list of window/patches in <code>bbox_list</code>, and builds up the
+histogram/heat map.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">add_heat</span>(heatmap, bbox_list):
@@ -1504,6 +1568,12 @@ they naturally scale with distance is revealed.
 </pre>
 </div>
 
+<p>
+For step 6, we add the function <code>apply_threshold</code>, which selects out
+of a heatmap image array <code>heat</code> only those array elements that
+exceed <code>threshold</code>.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">apply_threshold</span>(heat, threshold):
@@ -1512,6 +1582,15 @@ they naturally scale with distance is revealed.
     <span style="color: #b4fa70;">return</span> heatmap
 </pre>
 </div>
+
+<p>
+Steps 7 and 8 are combined in the next function,
+<code>draw_labeled_boxes</code>, which takes a multi-channel image array
+(typically, the original frame of video) in <code>img</code>, along with
+labeled regions in <code>labels</code>, computes the locations and bounding
+boxes for detected vehicles, and annotates the frame image with a
+box.
+</p>
 
 <div class="org-src-container">
 
@@ -1535,12 +1614,28 @@ they naturally scale with distance is revealed.
 </pre>
 </div>
 
+<p>
+In order to test these functions on a single image, we define a
+simple <code>process</code> function, which does feature-extraction and
+classification using the <code>extract_features</code> function and the
+<code>classifier</code> we trained earlier.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">process</span>(x):
     <span style="color: #b4fa70;">return</span> (classifier.predict(extract_features(x[0]))[0],x[1])
 </pre>
 </div>
+
+<p>
+For this test, we choose as our grid strategy just the simple
+<code>image_plane_scan</code> defined above.  Recall that this function covers
+an image with regular arrays of overlapping windows at fixed scales,
+and that it trades performance for simplicity.  The fact that it
+generates many windows and therefore operates slowly is of no
+concern for just one image.
+</p>
 
 <div class="org-src-container">
 
@@ -1577,6 +1672,141 @@ plt.savefig(<span style="color: #e9b96e;">"output_images/heatmaptest.png"</span>
 </p>
 </div>
 
+<p>
+Satisfied that we are acquiring the pieces we need, we are almost
+ready to create our actual video-processing pipeline.  Before doing
+that, however, we must address the related topics of
+false-positives, buffering, smoothing, moving averages, and
+time-space resolution.
+</p>
+
+<p>
+In the video-processing pipeline, the raw signal will be coming at
+us at a full 25 frames per second, with a lot of noise associated
+with highly-transient "false-positive" detection events at locations
+where there is no vehicle.  A tried-and-true way of coping with this
+is to buffer the signal over some time interval (which corresponds
+to some number of frames), integrate the signal over that buffer,
+and substitute a (possibly weighted) moving average over the buffer
+for the raw signal.  This smooths and conditions the signal,
+largely eliminating false-positive detections and "jitter", though
+it comes at a small price.  Our time-domain resolution dilates from
+the raw frame-rate to the time interval associated with our
+smoothing buffer.  Consequently, we should take care to make our
+buffer "long enough, and no longer"; it should remove most false
+positives, but still distinguish different cars, for instance.  
+</p>
+
+<p>
+One way to implement smoothing is to introduce a bona-fide
+frame-buffer, such as with a <a href="https://en.wikipedia.org/wiki/Circular_buffer">ring buffer</a> like Python's <a href="https://docs.python.org/2/library/collections.html#collections.deque"><code>deque</code></a>
+data-structure.  
+</p>
+
+<p>
+However, it turns out that is not at all necessary.
+</p>
+
+<p>
+Instead, we can embellish the analogy we have adopted of a "heat
+map" with the idea of "cooling."  First, we move the heat map data
+structure (typically, a 1-channel 2-D image array of the same size
+as a video frame) <i>outside</i> of the main processing loop.  A global
+variable, a local variable in a <a href="https://www.programiz.com/python-programming/closure">closure</a>, or a class object's member
+variable all are good candidates here.  Then, in our main processing
+loop, for each video frame we deliver a "heat pulse" into the heat
+map, through the <code>add_heat</code> map function above, for instance.  By
+itself, that would integrate the signal over the whole video.  To
+recover the notions of a short-interval buffer, a moving average,
+and a smoothing kernel, we just insert a "cooling" step before the
+heat pulse.  I.e., we "cool" the heat map by dis-integrating some of
+its accumulated signal.  A simple way to do that is just to
+down-scale it by a small <i>cooling factor</i>&#x2014;say 1%&#x2014;by multiplying
+it by a fraction.
+</p>
+
+<p>
+In fact, doing this imitates none other than one of the simplest and
+oldest-known cooling laws in Nature, <a href="https://en.wikipedia.org/wiki/Newton's_law_of_cooling">Newton's Law of Cooling</a>.  This
+is the cooling law for conductive media, and corresponds precisely
+to <a href="https://en.wikipedia.org/wiki/Exponential_smoothing">exponential smoothing</a>
+</p>
+
+<p>
+\[ \Delta T (t) = \Delta T (0) e^{-t/t_0} \]
+</p>
+
+<p>
+where \(t_0\) is the cooling time-scale and relates to the cooling
+factor.  Just as a guide, the following table lists the approximate
+time for the heat map to cool by one-half, at the video's 25 frames
+per second, for a handful of cooling factors.
+</p>
+
+<table border="2" cellspacing="0" cellpadding="6" rules="groups" frame="hsides">
+
+
+<colgroup>
+<col  class="right" />
+
+<col  class="left" />
+</colgroup>
+<thead>
+<tr>
+<th scope="col" class="right">Cooling Factor</th>
+<th scope="col" class="left">Cooling Time-Scale</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td class="right">0.99</td>
+<td class="left">3 seconds</td>
+</tr>
+
+<tr>
+<td class="right">0.98</td>
+<td class="left">1.5 seconds</td>
+</tr>
+
+<tr>
+<td class="right">0.97</td>
+<td class="left">1 second</td>
+</tr>
+
+<tr>
+<td class="right">0.95</td>
+<td class="left">0.5 second</td>
+</tr>
+
+<tr>
+<td class="right">0.90</td>
+<td class="left">10 milliseconds</td>
+</tr>
+</tbody>
+</table>
+
+<p>
+This is the buffering strategy we use here, and it works quite
+well.  I decide to go for an object-oriented approach, so I made the
+heat map into an object member variable.
+</p>
+
+<p>
+The <code>Component</code> class defines that object, along with a host of
+other attributes and methods for performing the video processing.
+Hyper-parameters that govern the operation of the pipeline are
+injected via the object constructor, and that includes the
+<code>cooling_factor</code> described above.  Its default value is 0.98, for a
+cooling time of between 1 and 2 seconds.  Note that most of the
+class functions really are just thin wrappers over the functions we
+developed above.  The main exception to that is the <code>get_out_img</code>
+function, which composes the "scene" for the video frame.  It
+supports an "extended" branch of operation wherein the main video
+window is supplemented with smaller windows animating the grid
+windows, and the evolving heat map.  In its layout, I made room for
+5 such smaller windows, though in the end I only needed 2 of them.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #b4fa70;">class</span> <span style="color: #8cc4ff;">Component</span>:
@@ -1593,27 +1823,29 @@ plt.savefig(<span style="color: #e9b96e;">"output_images/heatmaptest.png"</span>
                  numwindows = 100,
                  cooling_factor = 0.98,
                  center=<span style="color: #e9b2e3;">None</span>,
+                 extended=<span style="color: #e9b2e3;">True</span>,
                  size=<span style="color: #e9b2e3;">None</span>):
         <span style="color: #b4fa70;">self</span>.bboxwindow = np.copy(image)
-        <span style="color: #b4fa70;">self</span>.cell_per_block = 4
+        <span style="color: #b4fa70;">self</span>.cell_per_block = cell_per_block
         <span style="color: #b4fa70;">self</span>.center = center <span style="color: #b4fa70;">if</span> center <span style="color: #b4fa70;">else</span> <span style="color: #e090d7;">tuple</span>(np.array(img.shape[:2][::-1])//2)
-        <span style="color: #b4fa70;">self</span>.channel = 2
+        <span style="color: #b4fa70;">self</span>.channel = channel
         <span style="color: #b4fa70;">self</span>.children = []
-        <span style="color: #b4fa70;">self</span>.colorspace = cv2.COLOR_RGB2HSV
-        <span style="color: #b4fa70;">self</span>.cooling_factor = 0.98
-        <span style="color: #b4fa70;">self</span>.feature_vec = <span style="color: #e9b2e3;">True</span>
+        <span style="color: #b4fa70;">self</span>.colorspace = colorspace
+        <span style="color: #b4fa70;">self</span>.cooling_factor = cooling_factor
+        <span style="color: #b4fa70;">self</span>.feature_vec = feature_vec
         <span style="color: #b4fa70;">self</span>.flat = np.zeros_like(image[:,:,0]).astype(np.<span style="color: #e090d7;">float</span>)
         <span style="color: #b4fa70;">self</span>.heatmap = np.zeros_like(image[:,:,0]).astype(np.<span style="color: #e090d7;">float</span>)
         <span style="color: #b4fa70;">self</span>.image = img
         <span style="color: #b4fa70;">self</span>.labels = <span style="color: #e9b2e3;">None</span>
         <span style="color: #b4fa70;">self</span>.mainwindow = np.copy(image)
-        <span style="color: #b4fa70;">self</span>.numwindows = 100
-        <span style="color: #b4fa70;">self</span>.orient = 9
-        <span style="color: #b4fa70;">self</span>.pix_per_cell = 8
+        <span style="color: #b4fa70;">self</span>.numwindows = numwindows
+        <span style="color: #b4fa70;">self</span>.orient = orient
+        <span style="color: #b4fa70;">self</span>.pix_per_cell = pix_per_cell
         <span style="color: #b4fa70;">self</span>.size = size <span style="color: #b4fa70;">if</span> size <span style="color: #b4fa70;">else</span> <span style="color: #e090d7;">min</span>(img.shape[:2])//2
-        <span style="color: #b4fa70;">self</span>.test_size = 0.2
-        <span style="color: #b4fa70;">self</span>.threshold = 25
-        <span style="color: #b4fa70;">self</span>.transform_sqrt = <span style="color: #e9b2e3;">False</span>
+        <span style="color: #b4fa70;">self</span>.test_size = test_size
+        <span style="color: #b4fa70;">self</span>.threshold = threshold
+        <span style="color: #b4fa70;">self</span>.transform_sqrt = transform_sqrt
+        <span style="color: #b4fa70;">self</span>.extended = extended
 
 
     <span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">get_center</span>(<span style="color: #b4fa70;">self</span>):
@@ -1660,17 +1892,22 @@ plt.savefig(<span style="color: #e9b96e;">"output_images/heatmaptest.png"</span>
 
 
     <span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">get_out_img</span>(<span style="color: #b4fa70;">self</span>):
-        <span style="color: #fcaf3e;">bbox_img</span> = cv2.resize(<span style="color: #b4fa70;">self</span>.bboxwindow, <span style="color: #e090d7;">tuple</span>(np.array(<span style="color: #b4fa70;">self</span>.image.shape[:2][::-1])//2))
-        <span style="color: #fcaf3e;">hot2_img</span> = cv2.resize(scale(np.dstack([<span style="color: #b4fa70;">self</span>.get_heatmap(), <span style="color: #b4fa70;">self</span>.get_heatmap(), <span style="color: #b4fa70;">self</span>.flat]), 2*<span style="color: #b4fa70;">self</span>.threshold), <span style="color: #e090d7;">tuple</span>(np.array(image.shape[:2][::-1])//2))
-        cv2.putText(hot2_img, <span style="color: #e9b96e;">"Max: %.2f"</span> % np.<span style="color: #e090d7;">max</span>(<span style="color: #b4fa70;">self</span>.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
-        <span style="color: #fcaf3e;">flat_img</span> = cv2.resize(np.dstack([<span style="color: #b4fa70;">self</span>.flat, <span style="color: #b4fa70;">self</span>.flat, <span style="color: #b4fa70;">self</span>.flat]), <span style="color: #e090d7;">tuple</span>(np.array(image.shape[:2][::-1])//2))
-        <span style="color: #fcaf3e;">outp_img</span> = cv2.resize(np.hstack((np.vstack((<span style="color: #b4fa70;">self</span>.mainwindow,
-                                                    np.hstack((flat_img,
-                                                               flat_img)))),
-                                         np.vstack((bbox_img,
-                                                    hot2_img,
-                                                    flat_img)))),
-                              <span style="color: #e090d7;">tuple</span>(np.array(<span style="color: #b4fa70;">self</span>.image.shape[:2][::-1])))
+        <span style="color: #b4fa70;">if</span> <span style="color: #b4fa70;">self</span>.extended:
+            <span style="color: #fcaf3e;">bbox_img</span> = cv2.resize(<span style="color: #b4fa70;">self</span>.bboxwindow, <span style="color: #e090d7;">tuple</span>(np.array(<span style="color: #b4fa70;">self</span>.image.shape[:2][::-1])//2))
+            <span style="color: #fcaf3e;">hot2_img</span> = cv2.resize(scale(np.dstack([<span style="color: #b4fa70;">self</span>.get_heatmap(), <span style="color: #b4fa70;">self</span>.get_heatmap(), <span style="color: #b4fa70;">self</span>.flat]), 2*<span style="color: #b4fa70;">self</span>.threshold), <span style="color: #e090d7;">tuple</span>(np.array(image.shape[:2][::-1])//2))
+            cv2.putText(hot2_img, <span style="color: #e9b96e;">"Max: %.2f"</span> % np.<span style="color: #e090d7;">max</span>(<span style="color: #b4fa70;">self</span>.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+            cv2.putText(hot2_img, <span style="color: #e9b96e;">"Threshold: %.2f"</span> % np.<span style="color: #e090d7;">max</span>(<span style="color: #b4fa70;">self</span>.threshold), (25,55), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+            cv2.putText(hot2_img, <span style="color: #e9b96e;">"Cooling Fac.: %.2f"</span> % np.<span style="color: #e090d7;">max</span>(<span style="color: #b4fa70;">self</span>.cooling_factor), (25,85), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+            <span style="color: #fcaf3e;">flat_img</span> = cv2.resize(np.dstack([<span style="color: #b4fa70;">self</span>.flat, <span style="color: #b4fa70;">self</span>.flat, <span style="color: #b4fa70;">self</span>.flat]), <span style="color: #e090d7;">tuple</span>(np.array(image.shape[:2][::-1])//2))
+            <span style="color: #fcaf3e;">outp_img</span> = cv2.resize(np.hstack((np.vstack((<span style="color: #b4fa70;">self</span>.mainwindow,
+                                                        np.hstack((flat_img,
+                                                                   flat_img)))),
+                                             np.vstack((bbox_img,
+                                                        hot2_img,
+                                                        flat_img)))),
+                                  <span style="color: #e090d7;">tuple</span>(np.array(<span style="color: #b4fa70;">self</span>.image.shape[:2][::-1])))
+        <span style="color: #b4fa70;">else</span>:
+            <span style="color: #fcaf3e;">outp_img</span> = <span style="color: #b4fa70;">self</span>.mainwindow
         <span style="color: #b4fa70;">return</span> outp_img
 
 
@@ -1689,45 +1926,373 @@ plt.savefig(<span style="color: #e9b96e;">"output_images/heatmaptest.png"</span>
 </pre>
 </div>
 
+<p>
+First, we use the <code>Component</code> class to process the test video.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #fcaf3e;">in_clip</span> = VideoFileClip(<span style="color: #e9b96e;">"test_video.mp4"</span>)
-<span style="color: #fcaf3e;">scene</span> = Component(scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>)),
-                  cell_per_block = Theta.cell_per_block,
-                  channel = Theta.channel,
-                  colorspace = Theta.colorspace,
-                  feature_vec = Theta.feature_vec,
-                  orient = Theta.orient,
-                  pix_per_cell = Theta.pix_per_cell,
-                  transform_sqrt = Theta.transform_sqrt,
-                  test_size = Theta.test_size,
-                  threshold = Theta.threshold,
-                  numwindows = Theta.numwindows,
-                  cooling_factor = Theta.cooling_factor,
-                  center = <span style="color: #e9b2e3;">None</span>,
-                  size = <span style="color: #e9b2e3;">None</span>)
+<span style="color: #fcaf3e;">scene</span> = Component(scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>)),threshold=20,cooling_factor=0.99)
 <span style="color: #fcaf3e;">out_clip</span> = in_clip.fl_image(scene.process_image)
 out_clip.write_videofile(<span style="color: #e9b96e;">"output_images/test_output.mp4"</span>, audio=<span style="color: #e9b2e3;">False</span>)
 </pre>
 </div>
 
+<p>
+The test video is very short, so there barely is enough time for
+"heat to build up" to the point that one car is detected, let alone
+two.  
+</p>
+
+<iframe width="800" height="450" src="https://www.youtube.com/embed/McviDE-LWLA" frameborder="0" allowfullscreen></iframe>
+
+<p>
+Next, we process the main project video in "extended mode", to
+include the smaller sub-windows the the animated grid windows and
+evolving heat map.
+</p>
+
 <div class="org-src-container">
 
 <pre class="src src-python"><span style="color: #fcaf3e;">in_clip</span> = VideoFileClip(<span style="color: #e9b96e;">"project_video.mp4"</span>)
+<span style="color: #fcaf3e;">scene</span> = Component(scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>)),threshold=40,cooling_factor=0.99)
+<span style="color: #fcaf3e;">out_clip</span> = in_clip.fl_image(scene.process_image)
+out_clip.write_videofile(<span style="color: #e9b96e;">"output_images/project_output_extended.mp4"</span>, audio=<span style="color: #e9b2e3;">False</span>)
+</pre>
+</div>
+
+<p>
+As this video is in "extended mode", you can see both the animated
+grid windows, and the evolving heat map.  Note that here, we
+actually have moved away from <code>image_plane_scan</code> for generating the
+grid windows, and in fact are using <code>random_scan4</code> which, the reader
+will recall, lays out grids randomly in "physical space" in a volume
+that corresponds to a long, thick "ribbon".  Here, the ribbon
+extends across the road and from the road up to camera height.  The
+randomness of the windows should be self-evident from the video.
+</p>
+
+<p>
+There still are a few transient false-positives at a few places,
+unfortunately.  More tuning of the cooling, thresholding, and other
+parameters might banish them.  
+</p>
+
+<iframe width="800" height="450" src="https://www.youtube.com/embed/yGHN0OlBVRU" frameborder="0" allowfullscreen></iframe>
+
+<p>
+Finally, we repeat processing for the main project video, but not in
+extended mode.  This mainly was so that I could get a sense of the
+difference in processing times.  In fact, it cuts the processing
+time by about a half, indicating that generating, resizing, and
+composing together all the windows introduces considerable
+overhead.  
+</p>
+
+<div class="org-src-container">
+
+<pre class="src src-python"><span style="color: #fcaf3e;">in_clip</span> = VideoFileClip(<span style="color: #e9b96e;">"project_video.mp4"</span>)
+<span style="color: #fcaf3e;">scene</span> = Component(scale(mpimg.imread(<span style="color: #e9b96e;">"test_images/test1.jpg"</span>)),threshold=40,cooling_factor=0.99,extended=<span style="color: #e9b2e3;">False</span>)
 <span style="color: #fcaf3e;">out_clip</span> = in_clip.fl_image(scene.process_image)
 out_clip.write_videofile(<span style="color: #e9b96e;">"output_images/project_output.mp4"</span>, audio=<span style="color: #e9b2e3;">False</span>)
 </pre>
 </div>
+
+<p>
+This video is largely the same as the previous one, save for the
+fact that the smaller sub-windows are not present
+</p>
+
+<iframe width="800" height="450" src="https://www.youtube.com/embed/I6_oEk4CKBs" frameborder="0" allowfullscreen></iframe>
 </div>
 </div>
-
-
 
 <div id="outline-container-sec-7" class="outline-2">
 <h2 id="sec-7">Discussion</h2>
+<div class="outline-text-2" id="text-7">
+<p>
+I found this to be a very stimulating, but also a very challenging
+project.  I believe it would have been much easier had I used any of
+the code that Udacity provided in the lectures, however I rejected
+that almost completely.  But, that opened up the possibility to try
+other interesting techniques.  
+</p>
+
+<p>
+To recap, some of the alternative techniques I enjoyed adding were
+these.  
+</p>
+
+<ul class="org-ul">
+<li>Use dead-simple feature extraction based on just 1-channel HOG
+extraction.
+</li>
+<li>Flip the training images horizontally to essentially double the
+training set size.
+</li>
+<li>Tried modeling sliding windows, and estimating vehicle
+detections, in 3-D real-world physical coordinates.  Though I
+never got to the last step, I re-used much of the 3-D
+projection/deprojection code, and it added additional insight.
+</li>
+<li>Used random windows rather than strictly overlapping windows laid
+out on a regular array.
+</li>
+<li>Re-used the 3-D projection/deprojection code so as to scale the
+window sizes automatically with distance.
+</li>
+<li>Borrowed from Nature in order to implement exponential
+moving-average buffering of the heat map, without ever having to
+buffer any actual heat map frames.
+</li>
+<li>Adorned the main video output window with animations of the grid
+windows and of the evolving heat map, which aided in parameter
+tuning and added additional insight.
+
+<p>
+Of course, I also believe I met the main objectives for the
+project.  
+</p>
+</li>
+
+<li>Performed a Histogram of Oriented Gradients (HOG) feature
+extraction on a labeled training set of images and trained a
+classifier.
+</li>
+
+<li>Normalized the features and randomized the selection for training
+and testing.
+</li>
+
+<li>Implemented a sliding-window technique and used the trained
+classifier to search for vehicles in images.
+</li>
+
+<li>Ran a pipeline on video streams and created a heat map of
+recurring detections frame by frame to reject outliers and follow
+detected vehicles.
+</li>
+
+<li>Estimated a bounding box for detected vehicles.
+</li>
+</ul>
 </div>
-<div id="outline-container-sec-8" class="outline-2">
-<h2 id="sec-8">Tips</h2>
+
+<div id="outline-container-sec-7-1" class="outline-3">
+<h3 id="sec-7-1">Rubric Points</h3>
+<div class="outline-text-3" id="text-7-1">
+</div><div id="outline-container-sec-7-1-1" class="outline-4">
+<h4 id="sec-7-1-1"><span class="done DONE">DONE</span> Explain how (and identify where in your code) you extracted HOG features from the training images.</h4>
+<div class="outline-text-4" id="text-7-1-1">
+<p>
+This is described above in the section <b>Histogram of Oriented Gradients (HOG)</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-2" class="outline-4">
+<h4 id="sec-7-1-2"><span class="done DONE">DONE</span> Explain how you settled on your final choice of HOG parameters.</h4>
+<div class="outline-text-4" id="text-7-1-2">
+<p>
+This also is described above.  To recap, I started with the HOG
+parameters we used in the quizzes in the lecture, and then
+manually tuned them from there.  Not much tuning was needed.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-3" class="outline-4">
+<h4 id="sec-7-1-3"><span class="done DONE">DONE</span> Describe how (and identify where in your code) you trained a classifier using your selected HOG features</h4>
+<div class="outline-text-4" id="text-7-1-3">
+<p>
+This is described above in the section <b>Histogram of Oriented Gradients (HOG)</b>
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-4" class="outline-4">
+<h4 id="sec-7-1-4"><span class="done DONE">DONE</span> Describe how (and identify where in your code) you implemented a sliding window search.</h4>
+<div class="outline-text-4" id="text-7-1-4">
+<p>
+This is described above in the sections <b>Sliding Window Search I</b> and <b>Sliding Window Search II</b>.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-5" class="outline-4">
+<h4 id="sec-7-1-5"><span class="done DONE">DONE</span> How did you decide what scales to search and how much to overlap windows?</h4>
+<div class="outline-text-4" id="text-7-1-5">
+<p>
+This is described above in the sliding windows sections.  To
+recap, in the end since I modeled the windows in 3-D real world
+physical coordinates before projecting them onto the image
+plane, the sliding windows automatically scaled with distance. 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-6" class="outline-4">
+<h4 id="sec-7-1-6"><span class="done DONE">DONE</span> Show some examples of test images to demonstrate how your pipeline is working.</h4>
+<div class="outline-text-4" id="text-7-1-6">
+<p>
+Example test images of the heat map and detected vehicles appear
+above in the <b>Video Implementation</b>.  Beyond that, insight into
+how the pipeline is working can be gleaned by the animated grid
+windows and evolving heat map sub-windows in the 2 of the 3
+processed videos.  
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-7" class="outline-4">
+<h4 id="sec-7-1-7"><span class="done DONE">DONE</span> How did you optimize the performance of your classifier?</h4>
+<div class="outline-text-4" id="text-7-1-7">
+<p>
+I did not spend a great deal of time trying to optimize the
+performance of the classifier.  Largely, my steps toward
+optimization the whole pipeline comprised these things.
+</p>
+
+<ol class="org-ol">
+<li>Stuck to a ruthlessly simple classifier:  1-channel HOG
+feature extraction only.
+</li>
+<li>Reduced the total number of sliding windows.  Using random
+windows helped with this a great deal.
+</li>
+<li>(Optionally) remove the sub-windows during video processing.
+</li>
+</ol>
+
+<p>
+Even still, the processing does not work in real-time.  In order
+for that to occur, I might have to skip some frames, add in some
+multiprocessing features, or try more advance techniques.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-8" class="outline-4">
+<h4 id="sec-7-1-8"><span class="done DONE">DONE</span> Provide a link to your final video output.</h4>
+<div class="outline-text-4" id="text-7-1-8">
+<p>
+Obviously, this is done above. 
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-9" class="outline-4">
+<h4 id="sec-7-1-9"><span class="done DONE">DONE</span> Your pipeline should perform reasonably well on the entire project video</h4>
+<div class="outline-text-4" id="text-7-1-9">
+<p>
+I have somewhat wobbly and slightly unstable bounding boxes but
+am identifying the vehicles most of the time with minimal false
+positives.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-10" class="outline-4">
+<h4 id="sec-7-1-10"><span class="done DONE">DONE</span> Describe how (and identify where in your code) you implemented some kind of filter for false positives</h4>
+<div class="outline-text-4" id="text-7-1-10">
+<p>
+This is described above in the <b>Video Implementation</b> section.
+To recap, I "cool" the heat map between frames simply by
+multiplying it by a fraction close to 1 (~0.99).  This provides
+a nice, exponential moving average.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-11" class="outline-4">
+<h4 id="sec-7-1-11"><span class="done DONE">DONE</span> Describe how (and identify where in your code) you implemented some kind of method for combining overlapping bounding boxes.</h4>
+<div class="outline-text-4" id="text-7-1-11">
+<p>
+Combining or "overlapping" windows occurs by virtue of two
+factors:  random window placement, and integrating multiple
+frames into a heat map.  Random window placement means that even
+with a small overall number of windows, the likelihood that
+windows will overlap is very high, especially integrating over
+multiple frames, and that's exactly what we do with the heat
+map.  
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-12" class="outline-4">
+<h4 id="sec-7-1-12"><span class="done DONE">DONE</span> Briefly discuss any problems / issues you faced in your implementation of this project.</h4>
+<div class="outline-text-4" id="text-7-1-12">
+<p>
+The main problem I had was that my ambitious goal of identifying
+vehicles in 3D proved too challenging given the time allotted.
+Beyond that, I paid a price in not optimizing the video
+processing performance, in that it made parameter tuning a slow
+and tedious process.
+</p>
+
+<p>
+Another problem I notice is that, despite the good performance
+of the classifier on the test set, in the video it seems it
+succeeds in identifying cars largely based on the tail-lights on
+the back of the cars.  This a problem insofar as when cars enter
+the stage, the classifier is relatively unaware of it until the
+tail of the car enters the stage as well.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-13" class="outline-4">
+<h4 id="sec-7-1-13"><span class="done DONE">DONE</span> Where will your pipeline likely fail?</h4>
+<div class="outline-text-4" id="text-7-1-13">
+<p>
+The pipeline likely will fail under challenging lighting
+conditions because I did not attempt to make it more robust
+along that dimension.  And, because I did not optimize
+aggressively for performance, it probably would be impractical
+at much higher frame rates.
+</p>
+</div>
+</div>
+
+<div id="outline-container-sec-7-1-14" class="outline-4">
+<h4 id="sec-7-1-14"><span class="done DONE">DONE</span> What could you do to make it more robust?</h4>
+<div class="outline-text-4" id="text-7-1-14">
+<p>
+There are many things I could do to make it more robust.  
+</p>
+
+<ol class="org-ol">
+<li>Back off from a simple classifier, and add in color
+histograms, spatial binning, etc.
+</li>
+<li>Perhaps switch to a Convolutional Neural Network classifier.
+</li>
+<li>Aggressively optimize performance.  This would make it more
+robust insofar as it would make aggressive hyper-parameter
+optimization more feasible.
+</li>
+<li>The thresholding/labeling approach to identifying vehicles is
+not very robust.  SciKit has a <a href="http://scikit-image.org/docs/dev/auto_examples/features_detection/plot_blob.html">variety</a> of "Blob Detection"
+tools, with various performance characteristics.
+</li>
+<li>With better vehicle detection, instead of applying a sliding
+window search agnostically, it could be done just in the
+neighborhood of known cars.  I actually started heading down
+this path, and this is the main reason I adopted an
+object-oriented approach.  Alas, time pressures forced me to
+abandon it.
+</li>
+</ol>
+
+<p>
+As you can see, there is much room for improvement.
+Nevertheless, I am happy with my solution, and pleased that I
+discovered a few new (to me) techniques along the way.
+</p>
+</div>
+</div>
+</div>
 </div>
 </div>
 <div id="postamble" class="status">

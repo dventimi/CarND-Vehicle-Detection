@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pdb
 import pickle
+from scipy.ndimage.filters import gaussian_laplace
 
 # plt.ion()
 
@@ -526,6 +527,10 @@ class Component:
         hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*self.threshold), tuple(np.array(image.shape[:2][::-1])//2))
         cv2.putText(hot2_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
         flat_img = cv2.resize(np.dstack([self.flat, self.flat, self.flat]), tuple(np.array(image.shape[:2][::-1])//2))
+        blob_img = gaussian_laplace(self.get_heatmap(), 160)
+        pdb.set_trace()
+        blob_img = np.dstack([blob_img, blob_img, self.flat])
+        blob_img = cv2.resize(blob_img, tuple(np.array(image.shape[:2][::-1])//2))
         outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
                                                     np.hstack((flat_img,
                                                                flat_img)))),
@@ -552,19 +557,6 @@ class Component:
 
 
 in_clip = VideoFileClip("test_video.mp4")
-scene = Component(scale(mpimg.imread("test_images/test1.jpg")),
-                  cell_per_block = Theta.cell_per_block,
-                  channel = Theta.channel,
-                  colorspace = Theta.colorspace,
-                  feature_vec = Theta.feature_vec,
-                  orient = Theta.orient,
-                  pix_per_cell = Theta.pix_per_cell,
-                  transform_sqrt = Theta.transform_sqrt,
-                  test_size = Theta.test_size,
-                  threshold = Theta.threshold,
-                  numwindows = Theta.numwindows,
-                  cooling_factor = Theta.cooling_factor,
-                  center = None,
-                  size = None)
+scene = Component(scale(mpimg.imread("test_images/test1.jpg")))
 out_clip = in_clip.fl_image(scene.process_image)
 out_clip.write_videofile("output_images/test_output.mp4", audio=False)
