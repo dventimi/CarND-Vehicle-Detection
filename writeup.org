@@ -1,3 +1,28 @@
+# -*- org-babel-sh-command: "/bin/bash" -*-
+
+#+TITLE: Vehicle Detection Project
+#+DATE: <2017-03-08>
+#+AUTHOR: David A. Ventimiglia
+#+EMAIL: dventimi@gmail.com
+
+#+INDEX: Machine-Learning!Self-Driving Cars
+#+INDEX: Udacity!Self-Driving Car Nano-Degree Program
+
+#+OPTIONS: ':nil *:t -:t ::t <:t H:3 \n:nil ^:t arch:headline
+#+OPTIONS: author:t c:nil creator:comment d:(not "LOGBOOK") date:t
+#+OPTIONS: e:t email:t f:t inline:t num:nil p:nil pri:nil stat:t
+#+OPTIONS: tags:t tasks:t tex:t timestamp:t toc:nil todo:t |:t
+#+LANGUAGE: en
+
+#+OPTIONS: html-link-use-abs-url:nil html-postamble:t
+#+OPTIONS: html-preamble:t html-scripts:t html-style:t
+#+OPTIONS: html5-fancy:t tex:t
+#+CREATOR: <a href="http://www.gnu.org/software/emacs/">Emacs</a> 24.5.1 (<a href="http://orgmode.org">Org</a> mode 8.2.10)
+#+HTML_CONTAINER: div
+#+HTML_DOCTYPE: xhtml-strict
+#+HTML_HEAD_EXTRA: <style>@import 'https://fonts.googleapis.com/css?family=Quattrocento';</style>
+#+HTML_HEAD_EXTRA: <link rel="stylesheet" type="text/css" href="base.css"/>
+
 * Introduction
   
   The goals / steps of this project are the following:
@@ -12,13 +37,40 @@
     features and randomize a selection for training and testing.
   - Implement a sliding-window technique and use your trained
     classifier to search for vehicles in images.
-  - Run your pipeline on a video stream (start with the test_video.mp4
-    and later implement on full project_video.mp4) and create a heat
+  - Run your pipeline on a video stream (start with the ~test_video.mp4~
+    and later implement on full ~project_video.mp4~) and create a heat
     map of recurring detections frame by frame to reject outliers and
     follow detected vehicles.
   - Estimate a bounding box for vehicles detected.
 
 * Setup
+
+  The initial setup includes creating the [[https://www.python.org/][Python]] environment with the
+  packages that the project needs and uses.
+
+  *NOTE I*: The code for this project can be found in the repository's
+  [[file:detect.py][detect.py]] file.  /However/, all of the code in that file was
+  generated directly from the code blocks that appear in this file and
+  as such, contain no new information.  Reviewers can consult either
+  that Python file or this document.
+
+  *NOTE II*: This document is presented in a variety of formats.
+  There is this Emacs Org-Mode [[file:writeup.org][file]], a [[file:writeup.pdf][PDF]] generated using /LaTeX/, an
+  [[file:writeup.html][HTML]] file, and a [[file:writeup.md][Markdown]] file.  The Markdown file will be rendered
+  directly by GitHub when viewed on the web.  The HTML version can be
+  rendered either by cloning the repository to your own computer and
+  opening the file in a browser locally.  Or, you can view the same
+  file in GitHub Pages at [[https://dventimi.github.io/CarND-Advanced-Lane-Lines/writeup.html][this link]].  It looks quite a bit better than
+  the GitHub-rendered Markdown version.
+
+  - [[http://matplotlib.org/][matplotlib]] :: plotting and image processing tools
+  - [[http://www.numpy.org/][NumPy]] :: foundational scientific computing library
+  - [[http://zulko.github.io/moviepy/][MoviePy]] :: video processing tools
+  - [[http://opencv.org/][OpenCV]] :: computer vision library
+
+  The [[https://github.com/][GitHub]] [[https://github.com/dventimi/CarND-Advanced-Lane-Lines][repository]] for this project contains an [[file:environment.yml][environment.yml]]
+  file that can be used to create and activate a [[https://conda.io/docs/][Conda]] environment
+  with these commands.
 
   #+BEGIN_SRC sh :results output :tangle no :exports code
   conda create --name CarND-Vehicle-Detection --clone CarND-Advanced-Lane-Lines
@@ -31,8 +83,1189 @@
   source activate CarND-Vehicle-Detection
   #+END_SRC
 
+  Once activated this environment is used to launch Python in whatever
+  way one likes, such as a [[https://www.python.org/shell/][Python shell]], a [[https://ipython.org/][IPython shell]], or a [[http://jupyter.org/][jupyter
+  notebook]].  Having done that, the usual first step is to import the
+  packages that are used.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  from glob import glob
+  from itertools import groupby, islice, zip_longest, cycle, filterfalse, chain
+  from moviepy.editor import VideoFileClip, VideoClip
+  from random import choice, sample
+  from scipy.ndimage.measurements import label
+  from skimage.feature import hog
+  from sklearn.model_selection import train_test_split
+  from sklearn.preprocessing import StandardScaler
+  from sklearn.svm import LinearSVC
+  import cv2
+  import math
+  import matplotlib.image as mpimg
+  import matplotlib.pyplot as plt
+  import numpy as np
+  import pdb
+  import pickle
+  #+END_SRC
+
+  #+RESULTS:
+
 * Histogram of Oriented Gradients (HOG)
-* Sliding Window Search
+
+  The first step in this project was to create a vehicle classifier
+  that was capable of identifying vehicles in an image, since we can
+  treat the frames of the video we are processing as individual
+  images.  Broadly, there are two main approaches for this task.  
+
+  - [[https://en.wikipedia.org/wiki/Computer_vision][Computer Vision]]
+  - [[https://en.wikipedia.org/wiki/Convolutional_neural_network][Neural Networks]]
+
+  Because the emphasis of this module in the Udacity course seemed to
+  focus on the computer vision approach, and because we already used
+  neural networks for two previous projects, I chose to explore the
+  first of these.
+
+  Though the two are similar (and have the same objective:
+  classification), one of the hallmarks of the computer vision
+  approach seems to be manual [[https://en.wikipedia.org/wiki/Feature_extraction][feature extraction]]: relying on human
+  experience to select useful features for a [[https://en.wikipedia.org/wiki/Machine_learning][machine learning]] problem.
+  In the class, we explored several.
+
+  - [[https://en.wikipedia.org/wiki/Color_space][color space]] selection
+  - [[https://en.wikipedia.org/wiki/Data_binning][binning]] of spatial features
+  - [[https://en.wikipedia.org/wiki/Color_histogram][color histograms]]
+  - [[http://www.learnopencv.com/histogram-of-oriented-gradients/][histogram of oriented gradients (HOG)]]
+  - hybrid approaches
+
+  I experimented with each of these approaches, and with various
+  combinations of them, and finally selected a simple combination:
+  color space transformation and HOG-features.  Specifically, after
+  trying several different color spaces, I settled on the [[https://en.wikipedia.org/wiki/HSL_and_HSV][HSV]] color
+  space and then performed HOG feature extraction on just the /V/
+  ("value") channel.  Such a simple feature extractor may seem overly
+  simple---and perhaps it is---but the "proof is in the puding," as
+  they say.  It performed well, with decent accuracy on a test sample
+  (~98%) and on the project video.  Moreover, it has the virtue of
+  requiring relatively few computational resources.  Anything that
+  increases performance is a big win, since it promotes rapid,
+  [[https://en.wikipedia.org/wiki/Iterative_and_incremental_development][iterative]] experimentation.  
+
+  Let's dive into some code to see how that went.
+
+  To set the stage, we were provided with two data archive files,
+  [[file:vehicles.zip][vehicles.zip]] and [[file:non-vehicles.zip][non-vehicles.zip]], which as the names suggest
+  contained images of vehicles and things that are not vehicles.
+
+  Here is an example of a vehicle image.
+
+  [[file:vehicles/GTI_MiddleClose/image0000.png]]
+
+  And, here is an example of a non-vehicle image.
+
+  [[file:non-vehicles/GTI/image1.png]]
+
+  The size of each image is 64 x 64 pixels, and the vehicle and
+  non-vehicle images are contained (after unpacking the archive files)
+  in directories ~vehicle~ and ~non-vehicle~, respectively.  Now,
+  whatever classifier we use, we have to start by reading in these
+  images one way or another.  Confronted with tasks like this, I like
+  to compose small functions based on Python [[http://davidaventimiglia.com/python_generators.html][generators]], so first I
+  define a handful of useful utility functions.  
+
+  - feed :: generator function over a [[https://docs.python.org/2/library/glob.html][glob]], which maps a value ~y~ to
+            each filename that matches ~pattern~, yielding [[https://docs.python.org/3/tutorial/datastructures.html#tuples-and-sequences][tuples]]
+  - shuffle :: list-builder function over a sequence of tuples, which
+               [[https://www.merriam-webster.com/dictionary/reify][reifies]] it into a randomized list
+  - scale :: non-generator function, which scales the values in an
+             array, either by the maximum value in the array or by a
+             supplied parameter ~maxval~
+  - load :: generator function over a sequnce of [[https://en.wikipedia.org/wiki/Ordered_pair][ordered pairs]] in
+            which the first element is an image filename and the
+            second is any value (perhaps provided by the ~feed~
+            function above), which loads the image files into NumPy
+            arrays
+  - flip :: generator function over a sequence of ordered pairs in
+            which the first element is a NumPy array and the second is
+            any value, which "flips" the array horizontally (i.e.,
+            across a vertical axis) and producing a mirror image
+  - mirror :: generator function over a sequence of ordered pairs as
+              in ~flip~, but which yields first the entire sequence
+              unchanged and then the entire sequnce again but with the
+              images flipped
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  feed = lambda pattern, y: ((f, y) for f in glob(pattern))
+  shuffle = lambda l: sample(l, len(l))
+  scale = lambda img,maxval=None: (img/np.max(img)*255).astype(np.uint8) if maxval==None else (img/maxval*255).astype(np.uint8)
+  load = lambda g: ((mpimg.imread(x[0]),x[1]) for x in g)
+  flip = lambda g: ((x[0][:,::-1,:],x[1]) for x in g)
+  mirror = lambda g: chain(g, flip(g))
+  #+END_SRC
+
+  #+RESULTS:
+
+  When composed together, these functions provide a generator that
+  [[https://en.wikipedia.org/wiki/Lazy_loading][lazily loads]] training images in random order, twice: first
+  unflipped, and second flipped.  This serves several related
+  purposes.  First, randomizing data for training purposes is a
+  best-practice in Machine Learning.  Second, it effectively doubles
+  the size of our training set.  Third, we anticipate encountering
+  vehicles on the road from any angle, where the vehicles themselves
+  are inherently symmetric across a vertical plane running
+  longitudinally down the length of the car.
+
+  Before we can use this generator, however, we need something to use
+  it on.  Let's define our functions for extracting features and for
+  creating our classifiers.
+
+  First, the ~extract_features~ function transforms a given image to a
+  target color space, performs HOG feature extraction on a target
+  color channel, then [[http://scikit-learn.org/stable/modules/preprocessing.html#scaling-features-to-a-range][scales]] the features.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  def extract_features(img,
+                       colorspace=cv2.COLOR_RGB2HSV,
+                       channel=2,
+                       orient=9,
+                       pix_per_cell=8,
+                       cell_per_block=4,
+                       transform_sqrt=False,
+                       feature_vec=True):
+      img = scale(img)
+      X = np.array([])
+      X = np.append(X,
+                    hog(cv2.cvtColor(img, colorspace)[:,:,channel],
+                        orient,
+                        (pix_per_cell,pix_per_cell),
+                        (cell_per_block,cell_per_block),
+                        transform_sqrt = transform_sqrt,
+                        feature_vector = feature_vec))
+      s = StandardScaler().fit(X)
+      return s.transform(X)
+  #+END_SRC
+
+  #+RESULTS:
+
+  Note that many of the parameters are supplied with default values.
+  That is no accident.  The values given above, and repeated here, are
+  the ones used throughout this project, and were obtained through
+  experimentation by trial-and-error.
+
+  |------------------+-----------------+-----------------------------|
+  | Parameter        | Value           | Description                 |
+  |------------------+-----------------+-----------------------------|
+  | =colorspace=     | =COLOR_RGB2HSV= | target color space          |
+  | =channel=        | =2=             | target color channel        |
+  | =orient=         | =9=             | HOG orientation bins        |
+  | =pix_per_cell=   | =8=             | pixels per HOG cell         |
+  | =cell_per_block= | =4=             | cells per HOG block         |
+  | =transform_sqrt= | =False=         | scale values by =math.sqrt= |
+  | =feature_vec=    | =True=          | return feature vector       |
+  |------------------+-----------------+-----------------------------|
+
+  Next, the ~get_classifier~ function returns a function which is
+  itself a trained classifier.  Parameters control whether or not to
+  train the classifier anew or to load a pre-trained classifier from a
+  file, and what the training/test set split should be when training a
+  new one.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  def get_classifier(reload=False,test_size=0.2):
+      if reload:
+          samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
+          data = cycle(mirror(load(shuffle(samples))))
+          X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=test_size, random_state=np.random.randint(0, 100))
+          svc = LinearSVC()
+          svc.fit(X_train, y_train)
+          pickle.dump(svc, open("save.p","wb"))
+          print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
+      else:
+          svc = pickle.load(open("save.p", "rb"))
+      return svc
+  #+END_SRC
+
+  #+RESULTS:
+
+  Note the use of our composable utility functions to load the data
+  [[(compose1)][here]] and [[(compose2)][here]].  Note also that there are a variety of classifiers we
+  could use.
+
+  - [[https://en.wikipedia.org/wiki/Support_vector_machine][Support Vector Machine (SVM)]]
+  - [[https://en.wikipedia.org/wiki/Random_forest][Random Forest]]
+  - [[https://en.wikipedia.org/wiki/Naive_Bayes_classifier][Naive Bayes]]
+
+  I was prepared to experiment with each of these, and perhaps with
+  their combinations.  I started with an SVG, however, and found that
+  it performed well all on its own.
+
+  Training a classifier now is as simple as
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  classifier = get_classifier(True)
+  #+END_SRC
+
+  #+RESULTS:
+  : Test Accuracy of SVC =  0.9938
+
+  while loading a saved classifier is even simpler
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  classifier = get_classifier()
+  #+END_SRC
+
+  #+RESULTS:
+
+  Saving and re-loading classifiers like in this second command was
+  very helpful in this project for promoting rapid iteration, because
+  once I had a classifier I was happy with, I could move onto
+  subsequent stages in the project without needing to retrain the
+  classifier every time. 
+
+* Sliding Window Search I
+
+  I performed the most experimentation on various sliding window
+  schemes.  Initially, I expended effort on behalf of a single idea:
+  /Can I model vehicle position not in screen coordinates, measured in
+  pixels, but rather in real-world coordinates, measured in meters?/
+  My strategy was to generate sliding windows on a three-dimensional
+  (3D) grid whose origin is where the camera is placed and whose units
+  are meters, and then use geometry to project those windows onto the
+  screen in pixel coordinates.  This model has these assumptions.
+
+  - The image plane roughly corresponds to the vehicle's windshield.
+  - The windshield is approximately 2 meters wide, 1 meter tall, and 2
+    meters above the road.
+  - The camera is placed approximately 1 meter behind the windshield's
+    center, with a line-of-sight (LOS) perpendicular to it.
+  - The grid coordinages $\left( x, y, z \right)_{grid}$ correspond to
+    the horizontal position across the road, the vertical position
+    above the road, and the logitudinal position down the road.
+  - Positive $x$ values are to the right, negative $x$ values are to
+    the left, and $x_{grid} \in \left[ -15, 15 \right]$.
+  - Negative $y$ values are below the camera, and $y_{grid} \in \left[
+    -2, 0 \right]$.
+  - $z \lt 1$ values are inside the car, and $z_{grid} \in \left[ 10,
+    100 \right]$.
+
+  These assumptions determine the geometry of the problem and set its
+  physical scale, with a field-of-view (FOV) of 90°, and allow us to
+  create sliding windows as described above.  In principle, vehicle
+  detections on image patches can then be assigned real-world
+  coordinates $(x, y, z)$, or at least road coordinates $(x,
+  z)_{y=0}$, a real-world "heat map" can be built up, and then
+  individual vehicles can be identified either with conventional
+  thresholds + [[http://scikit-image.org/docs/dev/auto_examples/segmentation/plot_label.html][labelling]], with a [[https://en.wikipedia.org/wiki/Blob_detection][Laplace-of-Gaussian]] technique, or
+  with [[https://docs.scipy.org/doc/scipy-0.18.1/reference/cluster.vq.html][/k/-means clustering]].
+
+  The following coordinate conversion functions support the geometrical model outlined
+  above.
+
+  - crt2cyl :: Cartesian-to-cylindrical
+  - cyl2crt :: cylindrical-to-Cartesian
+  - cyl2sph :: cylindrical-to-spherical
+  - sph2cyl :: spherical-to-cylindrical
+  - crt2sph :: Cartesian-to-spherical
+  - sph2crt :: spherical-to-Cartesian
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  crt2cyl = lambda x,y,z: (math.sqrt(x**2+y**2), math.atan2(y,x), z)
+  cyl2crt = lambda rho,phi,z: (rho*math.cos(phi), rho*math.sin(phi), z)
+  cyl2sph = lambda rho,phi,z: (math.sqrt(rho**2+z**2), math.atan2(rho, z), phi)
+  sph2cyl = lambda r,theta,phi: (r*math.sin(theta), phi, r*math.cos(theta))
+  crt2sph = lambda x,y,z: (math.sqrt(x**2+y**2+z**2), math.acos(z/math.sqrt(x**2+y**2+z**2)), math.atan2(y,x))
+  sph2crt = lambda r,theta,phi: (r*math.sin(theta)*math.cos(phi), r*math.sin(theta)*math.sin(phi), r*math.cos(theta))
+  #+END_SRC
+
+  #+RESULTS:
+
+  The ~get_window~ function computes from $(x,y,z)$ a "window", which
+  is a list of tuples wherein the first two provide the corners of its
+  "bounding box" and the last provides the coordinates of its center.
+  Note that it also takes ~height~ and ~width~ parameters for the
+  physical size (in meters) of the window, as well as a ~horizon~
+  parameter, which is the fraction of the image plane (from below) at
+  which the horizon appears.  The default value of ~0.5~ corresponds
+  to the middle.  Finally, like many of my functions it takes a NumPy
+  image array parameter, ~img~, which is mainly for extracting the
+  size and shape of the image.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  def get_window(img, x, y, z, horizon=0.5, width=2, height=2):
+      d = 1
+      r,theta,phi = crt2sph(x,y,z)
+      rho2 = d*math.tan(theta)
+      x2,y2 = (rho2*math.cos(phi),rho2*math.sin(phi))
+      center = (int(img.shape[1]*0.5+x2*img.shape[1]//2),
+                int(img.shape[0]*(1-horizon)-y2*img.shape[1]//2))
+      scale = img.shape[1]//2
+      dx = int(width/2*scale/z)
+      dy = int(height/2*scale/z)
+      window = [(center[0]-dx,center[1]-dy), (center[0]+dx,center[1]+dy)] + [(x,y,z)]
+      return window
+  #+END_SRC
+
+  #+RESULTS:
+
+  Next, the ~draw_window~ function annotates an image ~img~ with the
+  window ~bbox~.  This does not factor into the actual vehicle
+  detection, of course, but the visualization is valuable for
+  understanding how the video processsing pipeline ultimately is
+  working.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  def draw_window(img, bbox, color=(0,0,255), thick=3):
+      cv2.rectangle(img, bbox[0], bbox[1], color, thick)
+      return img
+  #+END_SRC
+
+  #+RESULTS:
+
+  For example, first we draw a window box that roughly corresponds to
+  the windshield itself, using a test image from the lecture notes.
+  The windshield's center is at real-world coordinages
+  $(x,y,z)_{windshield} = (0,0,1)$.
+
+  #+BEGIN_SRC python -r :results value :session :tangle detect_vehicles.py :comments org :exports code
+  image = scale(mpimg.imread("bbox-example-image.jpg"))
+  draw_window(image, get_window(image, 0, 0.0, 1, horizon=0.5, width=2, height=1))
+  mpimg.imsave("output_images/windshield.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  | ((96 151 218) (96 151 218) (96 151 218) ... (93 146 216) (95 148 218) (96 149 219)) | ((97 152 219) (97 152 219) (97 152 219) ... (94 147 217) (95 148 218) (96 149 219)) | ((97 152 219) (98 153 220) (98 153 220) ... (94 147 217) (94 147 217) (95 148 218)) | ... | ((144 152 141) (122 130 119) (109 117 106) ... (151 160 143) (159 168 151) (159 168 151)) | ((135 143 132) (136 144 133) (149 157 146) ... (157 166 149) (162 171 154) (159 168 151)) | ((130 138 127) (140 148 137) (160 168 157) ... (157 166 149) (161 170 153) (157 166 149)) |
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/windshield.png]]
+
+  Next, we draw window boxes around a few of the cars in the image.
+  Note that here we are eschewing the default value of ~horizon~ in
+  favor of ~0.28~, given the peculiar tilt the camera seems to have in
+  this image.  That value, like the real-world vehicle coordintes
+  $(x,y,z)_i$, were obtained by hand through trial-and-error.
+
+  #+BEGIN_SRC python -r :results value :session :tangle detect_vehicles.py :comments org :exports code
+  image = scale(mpimg.imread("bbox-example-image.jpg"))
+  draw_window(image, get_window(image, 4.1, -1.0, 8, horizon=0.28))
+  draw_window(image, get_window(image, -10.5, -1.0, 22, horizon=0.28))
+  draw_window(image, get_window(image, -6.1, -1.0, 32, horizon=0.28))
+  draw_window(image, get_window(image, -0.8, -1.0, 35, horizon=0.28))
+  draw_window(image, get_window(image, 3, -1.0, 55, horizon=0.28))
+  draw_window(image, get_window(image, -6.1, -1.0, 55, horizon=0.28))
+  draw_window(image, get_window(image, -6.1, -1.0, 70, horizon=0.28))
+  mpimg.imsave("output_images/bbox-example-image-test.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  | ((96 151 218) (96 151 218) (96 151 218) ... (93 146 216) (95 148 218) (96 149 219)) | ((97 152 219) (97 152 219) (97 152 219) ... (94 147 217) (95 148 218) (96 149 219)) | ((97 152 219) (98 153 220) (98 153 220) ... (94 147 217) (94 147 217) (95 148 218)) | ... | ((144 152 141) (122 130 119) (109 117 106) ... (151 160 143) (159 168 151) (159 168 151)) | ((135 143 132) (136 144 133) (149 157 146) ... (157 166 149) (162 171 154) (159 168 151)) | ((130 138 127) (140 148 137) (160 168 157) ... (157 166 149) (161 170 153) (157 166 149)) |
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/bbox-example-image-test.png]]
+
+  In order to help visualize the geometry further, we animate a
+  handful of windows receding into the distance.
+
+  #+BEGIN_SRC python -r :results value :session :tangle detect_vehicles.py :comments org :exports code
+  def zooming_windows(img):
+      def make_frame(t):
+          frame = np.copy(img)
+          z = 2**(t % 5)*5
+          draw_window(frame, get_window(frame,-10.5,-1.0,z,horizon=0.28))
+          draw_window(frame, get_window(frame,-6.1,-1.0,z,horizon=0.28))
+          draw_window(frame, get_window(frame,-0.8,-1.0,z,horizon=0.28))
+          draw_window(frame, get_window(frame,4.1,-1.0,z,horizon=0.28))
+          cv2.putText(frame, "z: %.2f m" % z, (50,50), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+          return frame
+      return make_frame
+
+  clip = VideoClip(zooming_windows(mpimg.imread('bbox-example-image.jpg')), duration=5)
+  clip.write_videofile("output_images/zooming-windows.mp4", fps=25)
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+HTML: <iframe width="560" height="315" src="https://www.youtube.com/embed/lqp9rOSPVrc" frameborder="0" allowfullscreen></iframe>
+
+  This is just for visualization.  For vehicle detection, a denser
+  grid should be used, and we raster the windows horizontally as they
+  ratchet down-range.  We also confine the windows to a horizontal
+  plane, at $z = -1$.  But, because this sliding window and other ones
+  like it actually will be used in the vehicle-detection
+  video-processing pipeline, it is worthwhile to remove windows that
+  exceed the image boundary.  That is the purpose of the ~clip_window~
+  function.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  clip_window = lambda x, img: sum([0<=x[0][0]<=image.shape[1],
+                                    0<=x[1][0]<=image.shape[1],
+                                    0<=x[0][1]<=image.shape[0],
+                                    0<=x[1][1]<=image.shape[0]])==4
+  #+END_SRC
+
+  #+RESULTS:
+
+  
+  Since our strategy will be to write functions to produce "grids"
+  that can be used both for visualization and for vehicle-detection,
+  we refactor much of the animated visualization into a new function,
+  ~get_frame_maker~.
+
+  #+BEGIN_SRC python -r :results value :session :tangle detect_vehicles.py :comments org :exports code
+  def get_frame_maker(img, grid):
+      def make_frame(t):
+          frame = np.copy(img)
+          draw_window(frame, grid.__next__()[:2], color=(0,255,255))
+          return frame
+      return make_frame
+  #+END_SRC
+
+  #+RESULTS:
+
+  With these tools, first we define a "sparse grid"
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def sparse_scan(img):
+      grid = np.mgrid[-15:15:2,-1.0:0:2,3:7:1]
+      grid[2,]=2**grid[2,]
+      grid = grid.T.reshape(-1,3)
+      grid = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] for x in grid)
+      grid = filter(lambda x: clip_window(x, img), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  visualize its 40 windows
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("bbox-example-image.jpg"))
+  print(len(list(map(lambda w: draw_window(image, w[:2]), sparse_scan(image)))))
+  mpimg.imsave("output_images/sparse-scan.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : 40
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/sparse-scan.png]]
+
+  and then animate them.
+
+  #+BEGIN_SRC python -r :results value :session :tangle detect_vehicles.py :comments org :exports code
+  clip = VideoClip(get_frame_maker(image, cycle(sparse_scan(image))), duration=10)
+  clip.write_videofile("output_images/sparse-scan.mp4", fps=25)
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+HTML: <iframe width="560" height="315" src="https://www.youtube.com/embed/Vn1HxPRd2W0" frameborder="0" allowfullscreen></iframe>
+
+  We can also define a "dense grid" with more windows, scanning the
+  roadway with finer resolution in the $x$ and $z$ directions.  We
+  skip the animation this time, as it is rather boring.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  def dense_scan(img, h=2,w=2):
+      grid = np.mgrid[-15:15:0.5,-1.0:0:2,10:100:2]
+      grid = grid.T.reshape(-1,3)
+      grid = (get_window(img,x[0],x[1],x[2], horizon=0.28, height=h, width=w)+[x] for x in grid)
+      grid = filter(lambda x: clip_window(x, img), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  When produce the grid image, note that it has 2600+ windows!  That
+  probably is excessive and would slow down video processing.
+   
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("bbox-example-image.jpg"))
+  print(len(list(map(lambda w: draw_window(image, w[:2]), dense_scan(image)))))
+  mpimg.imsave("output_images/dense-scan.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : 2653
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/dense-scan.png]]
+
+  The sparse scan above probably is too sparse, but one way we can
+  reduce the number of windows would be to search the perimeter of the
+  road, where new cars are likely to come on-stage.  
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def perimeter_scan(img):
+      grid = np.mgrid[-15:15:0.5,-1.0:0:2,10:100:2]
+      grid = grid.T.reshape(-1,3)
+      grid = list(filter(lambda x: not (-4<=x[0]<=4 and 5<=x[2]<=40), grid))
+      grid = (get_window(img,x[0],x[1],x[2], horizon=0.28)+[x] for x in grid)
+      grid = filter(lambda x: clip_window(x, img), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("bbox-example-image.jpg"))
+  print(len(list(map(lambda w: draw_window(image, w[:2]), perimeter_scan(image)))))
+  mpimg.imsave("output_images/perimeter-scan.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : 2381
+
+  Sadly, this barely makes a dent in reducing the number of windows.  
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/perimeter-scan.png]]
+
+  In order to make headway, a simple choice is just to stick with the
+  dense grid, perform vehicle detections with it against a test image,
+  and gauge its performance.
+
+  To do that, we just map our classifier over all of the window
+  patches on an image.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def process(x):
+      return (classifier.predict(extract_features(x[0]))[0],x[1])
+
+  results = list(map(process, get_patches(image, dense_scan(image))))
+  print(len(results))
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... >>> >>> 2653
+
+  To visulize where vehicle detections have occurred on our dense grid
+  over the road, we filter the processed results that have a value
+  greater than 1 (i.e., a detection has occurred for that window patch)
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  _,r = zip(*filter(lambda x: x[0]>0, results))
+  x,y,z = zip(*r)
+  plt.scatter(x,z,s=10,c=y)
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/figure_4.png]]
+
+  These results are interesting and suggestive.  The contiguous
+  regions of detections presumably correspond to vehicles, with their
+  2D location associated with the "center" of each island.  However,
+  projection effects seem to elongate the detected regions with a
+  strong, pronounced radial pattern, which could be problematic.
+  Perhaps with suitable thresholding, a technique as simple as the
+  ~label~ function would be sufficient for picking out the cars.  On
+  the other hand, we might need more sophisticated techniques, such as
+  [[https://en.wikipedia.org/wiki/Blob_detection][Laplace-of-Gaussian]] or with [[https://docs.scipy.org/doc/scipy-0.18.1/reference/cluster.vq.html][/k/-means clustering]].  This is an
+  intriguing direction of inquiry to pursue in further studies,
+  however in this one I found that I was running out of time.  
+  
+  So, I switched gears to a more traditional sliding windows approach.
+
+* Sliding Window Search II
+
+  To refresh the reader, a more traditional sliding windows approach
+  models a grid of windows and their image patches not in real-world
+  3D physical space, but in 2D image space.  This involves trade-offs.
+  On the one hand, we give up a straightforward 3D interpretation of a
+  vehicle detection event.  In principle, we could still recover
+  distance information by deprojecting the window (the reverse of our
+  operation above), but at the expense of greater complication.  On
+  the other hand, we gain with this trade-off a simpler implementation
+  that already has a proven track-record.
+
+  We can reuse much of our other code, though, since we just need to
+  define functions to produce grids that obey whatever selection
+  functions we desire.
+
+  First up is a simple "image-plane scan", which carpets the image
+  plane in a uniform grid of windows at varous fixed scales.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def image_plane_scan(img,ny,overlap,scale):
+      size = int(img.shape[0]//ny)//scale
+      delta = int(size*(1-overlap))
+      box1 = (0,
+              img.shape[1],
+              (img.shape[0]-img.shape[0]//scale)//2,
+              img.shape[0] - (img.shape[0]-img.shape[0]//scale)//2)
+      box2 = (0,
+              img.shape[1],
+              (img.shape[0]//2),
+              img.shape[0])
+      grid = np.mgrid[0:img.shape[1]:delta,
+                      img.shape[0]:-delta:-delta].T.reshape(-1,2)
+      grid = ([(c[0],c[1]), (c[0]+size,c[1]+size)] for c in grid)
+      grid = filter(lambda x: clip_window(x, box1), grid)
+      grid = filter(lambda x: clip_window(x, box2), grid)
+      return grid
+
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print()
+  print("Number of windows: %s" %
+        len(list(map(lambda w: draw_window(image, w[:2]),
+                     chain(
+                         image_plane_scan(image,4,0.50,1),
+                         image_plane_scan(image,4,0.50,2),
+                         image_plane_scan(image,4,0.50,3)
+                     )))))
+  mpimg.imsave("output_images/imageplane-scan.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... ... >>> >>>
+  : ... ... ... ... ... ... Number of windows: 1439
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/imageplane-scan.png]]
+
+  This produces 1400+ images, which highlights a persistent problem I
+  grappled with.  There is an inherent trade-off between the accuracy
+  of a dense window sample, and the performance of a sparse window sample.
+
+  A conjecture I had to help ease the tension between these two poles
+  was to relax the constraint of a regular grid of windows in favor of
+  a random scattering of windows.  One of the reasons the window count
+  soared with a regular grid was the overlap; a high degree of overlap
+  (>50%) was needed for higher spatial resolution of detected vehicle
+  locations, but the number of windows is essentially quadratic in the
+  degree of overlap.  However, the stochastic behavior of an irregular
+  random sampling of windows means that a higher spatial resolution
+  can be achieved in an economy of window patches.  
+
+  The trade-offs here, however, are two-fold.  First, we no longer can
+  pre-compute the grid, but instead must compute a new random ensemble
+  of windows for each video frame.  In the testing that I did, this
+  proved to be of little concern; the Python profiler, and experience
+  as well, showed that the grid computation time was relatively
+  trivial.  The bulk of the time was spent on feature extraction and
+  classification for each window patch, a task that obviously cannot
+  be precomputed irrespective of the grid strategy.
+
+  Second, since any one /particular/ frame is treated with a
+  relatively sparse (but now random) irregular grid of windows, this
+  intensifies the need for integrating the signal over multiple frames
+  (a task we anticipated in any case).  Consequently, we lose
+  resolution in the time domain.  While that could be a problem for
+  fast-moving vehicles, it was not for the relatively slow relative
+  velocity of the vehicles in our project video.
+
+  My first version of a random scan uses a region-of-interest mask
+  that selects out a trapezoidal region covering just the border of
+  the road.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def region_of_interest(img, vertices):
+      mask = np.zeros_like(img)   
+      if len(img.shape) > 2:
+          channel_count = img.shape[2]
+          ignore_mask_color = (255,) * channel_count
+      else:
+          ignore_mask_color = 255
+      cv2.fillPoly(mask, vertices, ignore_mask_color)
+      masked_image = cv2.bitwise_and(img, mask)
+      return masked_image
+  #+END_SRC
+
+  #+RESULTS:
+
+  The actual function ~random_scan~ takes an image ~img~ (again, just
+  for the size information), and a window size.  Since these we are
+  now operating in the pixel coordinates of the image plane rather
+  than in the physical coordinates of the real world, the window size
+  is taken just in pixels.  This function works by thresholding a
+  random array.  It is a somewhat elegant technique, but is
+  inefficient and /slowww/.
+   
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def random_scan(img,size):
+      x = np.random.rand(*img.shape[:2])
+      x[x<0.999] = 0
+      x = scale(np.ceil(x))
+      x = region_of_interest(x, np.array([[[0, 0.5*image.shape[0]],
+                             [image.shape[1], 0.5*image.shape[0]],
+                             [image.shape[1], image.shape[0]],
+                             [(1-2/6)*image.shape[1], 0.5*image.shape[0]],
+                             [(2/6)*image.shape[1], 0.5*image.shape[0]],
+                             [0, image.shape[0]]]]).astype('int'))
+      x = np.dstack(np.nonzero(x))
+      s = np.random.choice(2**np.arange(4), len(x[0]))
+      grid = ([(c[1],c[0]),
+               (c[1]+size,c[0]+size)] for c in x[0])
+      return grid
+
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print()
+  print("Number of windows: %s" %
+        len(list(map(lambda w: draw_window(image, w[:2]),
+                     chain(
+                         random_scan(image,180),
+                         random_scan(image,90),
+                         random_scan(image,60)
+                     )))))
+  mpimg.imsave("output_images/random-scan1.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... ... ... ... ... ... ... ... ... >>> >>>
+  : ... ... ... ... ... ... Number of windows: 459
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/random-scan1.png]]
+
+  The next random grid function ~random_scan2~, uses a slightly
+  less-elegant approach, but is noticeably faster.  Aside from
+  confining the window to the bottom half of the image, however, it
+  does not use a region-of-interest mask.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def random_scan2(img,size,num=100):
+      x = np.random.rand(num,2)
+      x[:,0]*=image.shape[1]
+      x[:,1]*=image.shape[1]
+      x = x.astype('int')
+      x = x[x[:,1]<image.shape[0]]
+      x = x[x[:,1]>=image.shape[0]//2]
+      box = (0,img.shape[1],(img.shape[0]//2),650)
+      grid = ([(c[0],c[1]),
+               (c[0]+size,c[1]+size)] for c in x)
+      grid = filter(lambda x: clip_window(x, box), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print("Number of windows: %s" %
+        len(list(map(lambda w: draw_window(image, w[:2]),
+                     chain(
+                         random_scan2(image,256,1000),
+                         random_scan2(image,128,1000),
+                         random_scan2(image,64,1000)
+                     )))))
+  mpimg.imsave("output_images/random-scan2.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... Number of windows: 303
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/random-scan2.png]]
+
+  The next random scanner I tried worked in polar (pixel) coordinates
+  so as to achieve a masking affect, that concentrates windows on the
+  road borders where vehicles are most likely to appear.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def random_scan3(img,size,num=100,minr=None,maxr=None,mintheta=None,maxtheta=None,center=None,scale=True):
+      if center==None:
+          center = tuple(np.array(image.shape[:2][::-1])//2)
+      polar = np.random.rand(num,2)
+      polar[:,0]*=image.shape[1]
+      polar[:,1]*=math.pi*2
+      if not minr==None:
+          polar = polar[polar[:,0]>=minr]
+      if not maxr==None:
+          polar = polar[polar[:,0]<maxr]
+      if not mintheta==None:
+          polar = polar[polar[:,1]>=0]
+      if not maxtheta==None:
+          polar = polar[polar[:,1]<maxtheta]
+      if scale:
+          s = (size//2*polar[:,0]/image.shape[1]).astype('int')
+      else:
+          try:
+              dist = int(math.sqrt(sum([(center[0]-image.shape[1]//2)**2,
+                                        (center[1]-image.shape[0]//2)**2])))
+              s = [int(size*(dist/(image.shape[1]//2)))]*len(polar)
+          except:
+              pdb.set_trace()
+      x,y=zip(*np.dstack((center[0]+polar[:,0]*np.cos(polar[:,1]),
+                          center[1]+polar[:,0]*np.sin(polar[:,1]))).astype('int')[0])
+      grid = ([(c[0]-c[2],c[1]-c[2]), (c[0]+c[2],c[1]+c[2])] for c in zip(x,y,s))
+      box = (0,img.shape[1],(0),670)
+      grid = filter(lambda x: clip_window(x, box), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print("Number of windows: %s" %
+        len(list(map(lambda w: draw_window(image, w[:2]),
+                     chain(
+                         random_scan3(image,image.shape[1]//4,
+                                      3000,
+                                      minr=image.shape[0]//3,
+                                      mintheta=0,
+                                      maxtheta=math.pi)
+                     )))))
+  mpimg.imsave("output_images/random-scan3.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... ... ... Number of windows: 200
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/random-scan3.png]]
+
+  This produces an interestng pattern, but I was not comfortable
+  peculiar way the windows are scaled to different sizes, so I wrote
+  yet another grid window function ~random_scan4~, which is a bit of a
+  hybrid.  It actually re-uses the 3D model described above in
+  *Sliding Window Search I*.  Windows are defined in a 3D volume which
+  covers the road from left to right, from the car to the horizon, and
+  from the camera level down to the road.  I.e., it is like a long,
+  thick "ribbon", within which windows are randomly sampled.  As
+  above, we are back in physical space for window sizes, rather than
+  in pixel space.  Finally, the physical space windows are projected
+  back onto the image plane to give us a grid window in pixel-space.
+  In fact, this is almost exactly as we did in the earlier section.
+  The main differences are:
+
+  1. We discard the 3D window location information after projecting it
+     to a grid window on the image plane.
+  2. Window locations are randomly drawn from the 3D volume described
+     above, rather than laid out in a regular array.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def random_scan4(img,size,num=100,width=25,left=-12.5):
+      grid = np.random.rand(num,3)
+      grid[:,0]*=width
+      grid[:,1]*=2
+      grid[:,1]-=2
+      grid[:,2]*=40
+      grid[:,0]+=left
+      grid[:,1]-=4
+      grid[:,2]+=5
+      grid = grid.astype('int')
+      grid = (get_window(img,x[0],x[1],x[2], height=4, width=4)+[x] for x in grid)
+      grid = filter(lambda x: clip_window2(x, img), grid)
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print(len(list(map(lambda w: draw_window(image, w[:2]), random_scan4(image,2,1000)))))
+  mpimg.imsave("output_images/random-scan4.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : 825
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/random-scan4.png]]
+
+  Note that the above function takes parameters =width= and =left=
+  which set the width of the "ribbon" volume, and its left edge (in
+  meters).  We can easily combine a couple calls to this grid
+  generating function with judicious parameter choices in order to
+  achive interesting search patterns.  For instance, in
+  ~random_scan5~, we superimpose two ribbons, one on the left, and one
+  on the right, in order just to search the road borders.
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def random_scan5(img,size,num=100):
+      grid = chain(random_scan4(img,size,num//2,width=20,left=-30),
+                   random_scan4(img,size,num//2,width=20,left=+10))
+      return grid
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  print(len(list(map(lambda w: draw_window(image, w[:2]), random_scan5(image,2,1000)))))
+  mpimg.imsave("output_images/random-scan5.png", image, format="png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : 588
+
+  #+ATTR_HTML: :width 800px
+  [[file:output_images/random-scan5.png]]
+
+  While we may not want to search in this way in general, since the
+  void in the middle is a giant "blind spot", as a visualization this
+  has the nice property of removing foreground windows so that the way
+  they naturally scale with distance is revealed.  
+
 * Video Implementation
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def add_heat(heatmap, bbox_list):
+      for box in bbox_list:
+          heatmap[box[0][1]:box[1][1],
+                  box[0][0]:box[1][0]] += 1
+      return heatmap
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def apply_threshold(heat, threshold):
+      heatmap = np.copy(heat)
+      heatmap[heatmap <= threshold] = 0
+      return heatmap
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def draw_labeled_bboxes(img, labels):
+      for car_number in range(1, labels[1]+1):
+          nonzero = (labels[0] == car_number).nonzero()
+          nonzeroy = np.array(nonzero[0])
+          nonzerox = np.array(nonzero[1])
+          bbox = ((np.min(nonzerox), np.min(nonzeroy)),
+                  (np.max(nonzerox), np.max(nonzeroy)))
+          center = (int(np.mean((np.min(nonzerox), np.max(nonzerox)))),
+                    int(np.mean((np.min(nonzeroy), np.max(nonzeroy)))))
+          cv2.rectangle(img, bbox[0], bbox[1], (0,0,255), 6)
+          cv2.putText(img, "Car: %s" % car_number,
+                      (bbox[0][0],bbox[0][1]-20),
+                      cv2.FONT_HERSHEY_DUPLEX, 0.5, (255,255,255), 1)
+          cv2.putText(img, "Center: %s" % (center,),
+                      (bbox[0][0],bbox[0][1]-10),
+                      cv2.FONT_HERSHEY_DUPLEX, .5, (255,255,255), 1)
+      return img
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  def process(x):
+      return (classifier.predict(extract_features(x[0]))[0],x[1])
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  grid = list(chain(
+      image_plane_scan(image,4,0.750,1),
+      image_plane_scan(image,4,0.750,2),
+      image_plane_scan(image,4,0.750,3),
+  ))
+   
+  results = map(process, get_patches(image, grid))
+   
+  image = scale(mpimg.imread("test_images/test1.jpg"))
+  box_list = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
+  heat = np.zeros_like(image[:,:,0]).astype(np.float)
+  heat = add_heat(heat,box_list)
+  heat = apply_threshold(heat,5)
+  labels = label(heat)
+  print(labels[1], 'cars found')
+  draw_img = draw_labeled_bboxes(np.copy(image), labels)
+  fig = plt.figure()
+  plt.subplot(121)
+  plt.imshow(draw_img)
+  plt.title('Car Positions')
+  plt.subplot(122)
+  plt.imshow(heat, cmap='hot')
+  plt.title('Heat Map')
+  fig.tight_layout()
+  plt.savefig("output_images/heatmaptest.png")
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... >>> ... >>> ... >>> >>> 2 cars found
+  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f5ce403ff98>
+  : <matplotlib.image.AxesImage object at 0x7f5cdc24d978>
+  : <matplotlib.text.Text object at 0x7f5ce405aa58>
+  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f5cdc24df98>
+  : <matplotlib.image.AxesImage object at 0x7f5cdc24df60>
+  : <matplotlib.text.Text object at 0x7f5cdc270278>
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  class Component:
+      def __init__(self, img,
+                   cell_per_block = 4,
+                   channel = 2,
+                   colorspace = cv2.COLOR_RGB2HSV,
+                   feature_vec = True,
+                   orient = 9,
+                   pix_per_cell = 8,
+                   transform_sqrt = False,
+                   test_size = 0.2,
+                   threshold = 25,
+                   numwindows = 100,
+                   cooling_factor = 0.98,
+                   center=None,
+                   size=None):
+          self.bboxwindow = np.copy(image)
+          self.cell_per_block = 4
+          self.center = center if center else tuple(np.array(img.shape[:2][::-1])//2)
+          self.channel = 2
+          self.children = []
+          self.colorspace = cv2.COLOR_RGB2HSV
+          self.cooling_factor = 0.98
+          self.feature_vec = True
+          self.flat = np.zeros_like(image[:,:,0]).astype(np.float)
+          self.heatmap = np.zeros_like(image[:,:,0]).astype(np.float)
+          self.image = img
+          self.labels = None
+          self.mainwindow = np.copy(image)
+          self.numwindows = 100
+          self.orient = 9
+          self.pix_per_cell = 8
+          self.size = size if size else min(img.shape[:2])//2
+          self.test_size = 0.2
+          self.threshold = 25
+          self.transform_sqrt = False
+   
+   
+      def get_center(self):
+          return self.center
+   
+   
+      def get_size(self):
+          return self.size
+   
+   
+      def cool(self):
+          self.heatmap*=self.cooling_factor
+   
+   
+      def get_heatmap(self):
+          return self.heatmap
+   
+   
+      def sample(self, mainwindow, grid):
+          results = map(process, get_patches(mainwindow, grid))
+          return results
+   
+   
+      def heat(self, results):
+          samples = list(map(lambda x: x[1][:2], filter(lambda x: x[0]>0, results)))
+          for s in samples:
+              self.heatmap[s[0][1]:s[1][1],
+                           s[0][0]:s[1][0]] += 1
+   
+   
+      def evolve(self, image):
+          self.cool()
+          self.mainwindow = np.copy(image)
+          self.bboxwindow = np.copy(image)
+          self.chld_img = np.dstack([self.flat, self.flat, self.flat])
+          grid = self.grid(self.numwindows)
+          self.addboxes(self.bboxwindow, grid)
+          results = self.sample(self.mainwindow, grid)
+          self.heat(results)
+          self.heatmap = cv2.GaussianBlur(self.heatmap, (31, 31), 0)
+          thresholded = apply_threshold(self.get_heatmap(),self.threshold)
+          self.labels = label(thresholded)
+          draw_labeled_bboxes(self.mainwindow, self.labels)
+   
+   
+      def get_out_img(self):
+          bbox_img = cv2.resize(self.bboxwindow, tuple(np.array(self.image.shape[:2][::-1])//2))
+          hot2_img = cv2.resize(scale(np.dstack([self.get_heatmap(), self.get_heatmap(), self.flat]), 2*self.threshold), tuple(np.array(image.shape[:2][::-1])//2))
+          cv2.putText(hot2_img, "Max: %.2f" % np.max(self.get_heatmap()), (25,25), cv2.FONT_HERSHEY_DUPLEX, 1, (255,255,255), 2)
+          flat_img = cv2.resize(np.dstack([self.flat, self.flat, self.flat]), tuple(np.array(image.shape[:2][::-1])//2))
+          outp_img = cv2.resize(np.hstack((np.vstack((self.mainwindow,
+                                                      np.hstack((flat_img,
+                                                                 flat_img)))),
+                                           np.vstack((bbox_img,
+                                                      hot2_img,
+                                                      flat_img)))),
+                                tuple(np.array(self.image.shape[:2][::-1])))
+          return outp_img
+   
+   
+      def grid(self, num):
+          return list(random_scan5(self.image,
+                                   2,
+                                   num))
+   
+   
+      def addboxes(self, bboxwindow, grid):
+          list(map(lambda w: draw_window(bboxwindow, w[:2]), grid))
+   
+   
+      def process_image(self, image):
+          self.evolve(image)
+          return self.get_out_img()
+  #+END_SRC
+
+  #+RESULTS:
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  in_clip = VideoFileClip("test_video.mp4")
+  scene = Component(scale(mpimg.imread("test_images/test1.jpg")),
+                    cell_per_block = Theta.cell_per_block,
+                    channel = Theta.channel,
+                    colorspace = Theta.colorspace,
+                    feature_vec = Theta.feature_vec,
+                    orient = Theta.orient,
+                    pix_per_cell = Theta.pix_per_cell,
+                    transform_sqrt = Theta.transform_sqrt,
+                    test_size = Theta.test_size,
+                    threshold = Theta.threshold,
+                    numwindows = Theta.numwindows,
+                    cooling_factor = Theta.cooling_factor,
+                    center = None,
+                    size = None)
+  out_clip = in_clip.fl_image(scene.process_image)
+  out_clip.write_videofile("output_images/test_output.mp4", audio=False)
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... ... ... ... ... ... ... ... >>> >>> [MoviePy] >>>> Building video output_images/test_output.mp4
+  : [MoviePy] Writing video output_images/test_output.mp4
+  :   0% 0/39 [00:00<?, ?it/s]  3% 1/39 [00:00<00:14,  2.69it/s]  5% 2/39 [00:00<00:14,  2.58it/s]  8% 3/39 [00:01<00:14,  2.49it/s] 10% 4/39 [00:01<00:14,  2.49it/s] 13% 5/39 [00:02<00:13,  2.47it/s] 15% 6/39 [00:02<00:13,  2.46it/s] 18% 7/39 [00:02<00:12,  2.47it/s] 21% 8/39 [00:03<00:12,  2.51it/s] 23% 9/39 [00:03<00:12,  2.44it/s] 26% 10/39 [00:04<00:11,  2.44it/s] 28% 11/39 [00:04<00:11,  2.44it/s] 31% 12/39 [00:04<00:11,  2.43it/s] 33% 13/39 [00:05<00:10,  2.45it/s] 36% 14/39 [00:05<00:10,  2.44it/s] 38% 15/39 [00:06<00:09,  2.44it/s] 41% 16/39 [00:06<00:09,  2.45it/s] 44% 17/39 [00:06<00:09,  2.44it/s] 46% 18/39 [00:07<00:08,  2.46it/s] 49% 19/39 [00:07<00:08,  2.42it/s] 51% 20/39 [00:08<00:07,  2.43it/s] 54% 21/39 [00:08<00:07,  2.40it/s] 56% 22/39 [00:09<00:06,  2.45it/s] 59% 23/39 [00:09<00:06,  2.40it/s] 62% 24/39 [00:09<00:06,  2.41it/s] 64% 25/39 [00:10<00:05,  2.39it/s] 67% 26/39 [00:10<00:05,  2.30it/s] 69% 27/39 [00:11<00:05,  2.23it/s] 72% 28/39 [00:11<00:04,  2.25it/s] 74% 29/39 [00:12<00:04,  2.27it/s] 77% 30/39 [00:12<00:03,  2.33it/s] 79% 31/39 [00:12<00:03,  2.32it/s] 82% 32/39 [00:13<00:02,  2.35it/s] 85% 33/39 [00:13<00:02,  2.34it/s] 87% 34/39 [00:14<00:02,  2.37it/s] 90% 35/39 [00:14<00:01,  2.37it/s] 92% 36/39 [00:15<00:01,  2.38it/s] 95% 37/39 [00:15<00:00,  2.42it/s] 97% 38/39 [00:15<00:00,  2.41it/s]
+  : [MoviePy] Done.
+  : [MoviePy] >>>> Video ready: output_images/test_output.mp4
+
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports both
+  in_clip = VideoFileClip("project_video.mp4")
+  scene = Component(scale(mpimg.imread("test_images/test1.jpg")),
+                    cell_per_block = Theta.cell_per_block,
+                    channel = Theta.channel,
+                    colorspace = Theta.colorspace,
+                    feature_vec = Theta.feature_vec,
+                    orient = Theta.orient,
+                    pix_per_cell = Theta.pix_per_cell,
+                    transform_sqrt = Theta.transform_sqrt,
+                    test_size = Theta.test_size,
+                    threshold = Theta.threshold,
+                    numwindows = Theta.numwindows,
+                    cooling_factor = Theta.cooling_factor,
+                    center = None,
+                    size = None)
+  out_clip = in_clip.fl_image(scene.process_image)
+  out_clip.write_videofile("output_images/project_output.mp4", audio=False)
+  #+END_SRC
+
+  #+RESULTS:
+  : 
+  : ... ... ... ... ... ... ... ... ... ... ... ... ... >>> >>> [MoviePy] >>>> Building video output_images/project_output.mp4
+  : [MoviePy] Writing video output_images/project_output.mp4
+  :   0% 0/1261 [00:00<?, ?it/s]  0% 1/1261 [00:00<07:37,  2.75it/s]  0% 2/1261 [00:00<07:40,  2.73it/s]  0% 3/1261 [00:01<07:45,  2.70it/s]  0% 4/1261 [00:01<07:35,  2.76it/s]  0% 5/1261 [00:01<07:43,  2.71it/s]  0% 6/1261 [00:02<07:40,  2.73it/s]  1% 7/1261 [00:02<07:37,  2.74it/s]  1% 8/1261 [00:02<07:39,  2.72it/s]  1% 9/1261 [00:03<07:31,  2.77it/s]  1% 10/1261 [00:03<07:54,  2.64it/s]  1% 11/1261 [00:04<07:57,  2.62it/s]  1% 12/1261 [00:04<07:54,  2.63it/s]  1% 13/1261 [00:04<07:49,  2.66it/s]  1% 14/1261 [00:05<07:50,  2.65it/s]  1% 15/1261 [00:05<07:47,  2.66it/s]  1% 16/1261 [00:05<07:47,  2.66it/s]  1% 17/1261 [00:06<07:41,  2.69it/s]  1% 18/1261 [00:06<07:26,  2.79it/s]  2% 19/1261 [00:07<07:27,  2.77it/s]  2% 20/1261 [00:07<07:28,  2.77it/s]  2% 21/1261 [00:07<07:35,  2.72it/s]  2% 22/1261 [00:08<07:31,  2.74it/s]  2% 23/1261 [00:08<07:36,  2.71it/s]  2% 24/1261 [00:08<07:31,  2.74it/s]  2% 25/1261 [00:09<07:53,  2.61it/s]  2% 26/1261 [00:09<08:00,  2.57it/s]  2% 27/1261 [00:10<08:14,  2.50it/s]  2% 28/1261 [00:10<08:01,  2.56it/s]  2% 29/1261 [00:10<07:52,  2.61it/s]  2% 30/1261 [00:11<07:48,  2.63it/s]  2% 31/1261 [00:11<07:42,  2.66it/s]  3% 32/1261 [00:11<07:32,  2.72it/s]  3% 33/1261 [00:12<07:30,  2.72it/s]  3% 34/1261 [00:12<07:27,  2.74it/s]  3% 35/1261 [00:13<07:30,  2.72it/s]  3% 36/1261 [00:13<07:30,  2.72it/s]  3% 37/1261 [00:13<07:28,  2.73it/s]  3% 38/1261 [00:14<07:32,  2.70it/s]  3% 39/1261 [00:14<07:37,  2.67it/s]  3% 40/1261 [00:14<07:34,  2.69it/s]  3% 41/1261 [00:15<07:28,  2.72it/s]  3% 42/1261 [00:15<07:27,  2.72it/s]  3% 43/1261 [00:16<08:01,  2.53it/s]  3% 44/1261 [00:16<07:45,  2.61it/s]  4% 45/1261 [00:16<07:39,  2.65it/s]  4% 46/1261 [00:17<07:33,  2.68it/s]  4% 47/1261 [00:17<07:24,  2.73it/s]  4% 48/1261 [00:17<07:25,  2.72it/s]  4% 49/1261 [00:18<07:35,  2.66it/s]  4% 50/1261 [00:18<07:47,  2.59it/s]  4% 51/1261 [00:19<07:50,  2.57it/s]  4% 52/1261 [00:19<07:51,  2.57it/s]  4% 53/1261 [00:19<07:55,  2.54it/s]  4% 54/1261 [00:20<07:38,  2.63it/s]  4% 55/1261 [00:20<07:58,  2.52it/s]  4% 56/1261 [00:21<08:07,  2.47it/s]  5% 57/1261 [00:21<07:51,  2.55it/s]  5% 58/1261 [00:21<07:45,  2.58it/s]  5% 59/1261 [00:22<07:58,  2.51it/s]  5% 60/1261 [00:22<07:53,  2.54it/s]  5% 61/1261 [00:23<07:45,  2.58it/s]  5% 62/1261 [00:23<07:40,  2.60it/s]  5% 63/1261 [00:23<07:38,  2.62it/s]  5% 64/1261 [00:24<07:37,  2.62it/s]  5% 65/1261 [00:24<07:44,  2.57it/s]  5% 66/1261 [00:24<07:31,  2.65it/s]  5% 67/1261 [00:25<07:44,  2.57it/s]  5% 68/1261 [00:25<07:36,  2.62it/s]  5% 69/1261 [00:26<07:55,  2.51it/s]  6% 70/1261 [00:26<08:06,  2.45it/s]  6% 71/1261 [00:26<08:15,  2.40it/s]  6% 72/1261 [00:27<08:00,  2.47it/s]  6% 73/1261 [00:27<08:02,  2.46it/s]  6% 74/1261 [00:28<07:51,  2.52it/s]  6% 75/1261 [00:28<07:34,  2.61it/s]  6% 76/1261 [00:28<07:33,  2.61it/s]  6% 77/1261 [00:29<07:37,  2.59it/s]  6% 78/1261 [00:29<07:35,  2.60it/s]  6% 79/1261 [00:30<07:41,  2.56it/s]  6% 80/1261 [00:30<07:40,  2.56it/s]  6% 81/1261 [00:30<07:31,  2.62it/s]  7% 82/1261 [00:31<07:18,  2.69it/s]  7% 83/1261 [00:31<07:20,  2.67it/s]  7% 84/1261 [00:31<07:31,  2.61it/s]  7% 85/1261 [00:32<07:33,  2.59it/s]  7% 86/1261 [00:32<07:31,  2.60it/s]  7% 87/1261 [00:33<07:44,  2.53it/s]  7% 88/1261 [00:33<07:46,  2.52it/s]  7% 89/1261 [00:34<08:10,  2.39it/s]  7% 90/1261 [00:34<08:18,  2.35it/s]  7% 91/1261 [00:34<08:14,  2.37it/s]  7% 92/1261 [00:35<08:01,  2.43it/s]  7% 93/1261 [00:35<08:21,  2.33it/s]  7% 94/1261 [00:36<08:24,  2.31it/s]  8% 95/1261 [00:36<08:03,  2.41it/s]  8% 96/1261 [00:36<07:47,  2.49it/s]  8% 97/1261 [00:37<07:55,  2.45it/s]  8% 98/1261 [00:37<08:03,  2.41it/s]  8% 99/1261 [00:38<07:59,  2.42it/s]  8% 100/1261 [00:38<07:45,  2.49it/s]  8% 101/1261 [00:38<08:00,  2.42it/s]  8% 102/1261 [00:39<07:49,  2.47it/s]  8% 103/1261 [00:39<07:58,  2.42it/s]  8% 104/1261 [00:40<07:57,  2.42it/s]  8% 105/1261 [00:40<07:45,  2.48it/s]  8% 106/1261 [00:40<07:46,  2.48it/s]  8% 107/1261 [00:41<07:47,  2.47it/s]  9% 108/1261 [00:41<07:39,  2.51it/s]  9% 109/1261 [00:42<07:52,  2.44it/s]  9% 110/1261 [00:42<07:42,  2.49it/s]  9% 111/1261 [00:43<07:45,  2.47it/s]  9% 112/1261 [00:43<07:41,  2.49it/s]  9% 113/1261 [00:43<07:37,  2.51it/s]  9% 114/1261 [00:44<07:29,  2.55it/s]  9% 115/1261 [00:44<07:20,  2.60it/s]  9% 116/1261 [00:44<07:22,  2.59it/s]  9% 117/1261 [00:45<07:23,  2.58it/s]  9% 118/1261 [00:45<07:48,  2.44it/s]  9% 119/1261 [00:46<07:55,  2.40it/s] 10% 120/1261 [00:46<07:39,  2.48it/s] 10% 121/1261 [00:47<07:46,  2.44it/s] 10% 122/1261 [00:47<07:35,  2.50it/s] 10% 123/1261 [00:47<07:28,  2.54it/s] 10% 124/1261 [00:48<07:48,  2.43it/s] 10% 125/1261 [00:48<07:50,  2.42it/s] 10% 126/1261 [00:49<07:55,  2.39it/s] 10% 127/1261 [00:49<07:48,  2.42it/s] 10% 128/1261 [00:49<07:27,  2.53it/s] 10% 129/1261 [00:50<07:41,  2.45it/s] 10% 130/1261 [00:50<07:24,  2.54it/s] 10% 131/1261 [00:51<07:38,  2.46it/s] 10% 132/1261 [00:51<07:22,  2.55it/s] 11% 133/1261 [00:51<07:35,  2.48it/s] 11% 134/1261 [00:52<07:25,  2.53it/s] 11% 135/1261 [00:52<07:25,  2.53it/s] 11% 136/1261 [00:53<07:25,  2.52it/s] 11% 137/1261 [00:53<07:17,  2.57it/s] 11% 138/1261 [00:53<07:10,  2.61it/s] 11% 139/1261 [00:54<07:06,  2.63it/s] 11% 140/1261 [00:54<06:59,  2.67it/s] 11% 141/1261 [00:54<07:03,  2.65it/s] 11% 142/1261 [00:55<07:02,  2.65it/s] 11% 143/1261 [00:55<06:57,  2.68it/s] 11% 144/1261 [00:56<07:05,  2.62it/s] 11% 145/1261 [00:56<07:18,  2.54it/s] 12% 146/1261 [00:56<07:19,  2.54it/s] 12% 147/1261 [00:57<07:29,  2.48it/s] 12% 148/1261 [00:57<07:41,  2.41it/s] 12% 149/1261 [00:58<07:44,  2.39it/s] 12% 150/1261 [00:58<07:41,  2.41it/s] 12% 151/1261 [00:58<07:33,  2.45it/s] 12% 152/1261 [00:59<07:39,  2.41it/s] 12% 153/1261 [00:59<07:37,  2.42it/s] 12% 154/1261 [01:00<07:26,  2.48it/s] 12% 155/1261 [01:00<07:15,  2.54it/s] 12% 156/1261 [01:00<07:07,  2.58it/s] 12% 157/1261 [01:01<07:07,  2.58it/s] 13% 158/1261 [01:01<07:01,  2.62it/s] 13% 159/1261 [01:02<07:00,  2.62it/s] 13% 160/1261 [01:02<07:00,  2.62it/s] 13% 161/1261 [01:02<06:57,  2.63it/s] 13% 162/1261 [01:03<06:50,  2.68it/s] 13% 163/1261 [01:03<06:53,  2.65it/s] 13% 164/1261 [01:03<07:11,  2.54it/s] 13% 165/1261 [01:04<07:17,  2.51it/s] 13% 166/1261 [01:04<07:38,  2.39it/s] 13% 167/1261 [01:05<07:24,  2.46it/s] 13% 168/1261 [01:05<07:19,  2.49it/s] 13% 169/1261 [01:05<07:09,  2.54it/s] 13% 170/1261 [01:06<07:14,  2.51it/s] 14% 171/1261 [01:06<07:12,  2.52it/s] 14% 172/1261 [01:07<07:08,  2.54it/s] 14% 173/1261 [01:07<07:05,  2.56it/s] 14% 174/1261 [01:07<06:58,  2.60it/s] 14% 175/1261 [01:08<06:50,  2.64it/s] 14% 176/1261 [01:08<06:52,  2.63it/s] 14% 177/1261 [01:09<06:57,  2.60it/s] 14% 178/1261 [01:09<07:03,  2.56it/s] 14% 179/1261 [01:09<07:18,  2.47it/s] 14% 180/1261 [01:10<07:04,  2.54it/s] 14% 181/1261 [01:10<07:07,  2.53it/s] 14% 182/1261 [01:11<07:05,  2.54it/s] 15% 183/1261 [01:11<07:01,  2.56it/s] 15% 184/1261 [01:11<06:52,  2.61it/s] 15% 185/1261 [01:12<06:55,  2.59it/s] 15% 186/1261 [01:12<06:59,  2.56it/s] 15% 187/1261 [01:12<06:52,  2.60it/s] 15% 188/1261 [01:13<06:50,  2.62it/s] 15% 189/1261 [01:13<06:50,  2.61it/s] 15% 190/1261 [01:14<06:50,  2.61it/s] 15% 191/1261 [01:14<07:01,  2.54it/s] 15% 192/1261 [01:14<06:53,  2.58it/s] 15% 193/1261 [01:15<06:52,  2.59it/s] 15% 194/1261 [01:15<07:01,  2.53it/s] 15% 195/1261 [01:16<07:23,  2.40it/s] 16% 196/1261 [01:16<07:21,  2.41it/s] 16% 197/1261 [01:17<07:34,  2.34it/s] 16% 198/1261 [01:17<07:43,  2.29it/s] 16% 199/1261 [01:17<07:25,  2.38it/s] 16% 200/1261 [01:18<07:19,  2.41it/s] 16% 201/1261 [01:18<07:10,  2.46it/s] 16% 202/1261 [01:19<07:00,  2.52it/s] 16% 203/1261 [01:19<06:54,  2.55it/s] 16% 204/1261 [01:19<07:22,  2.39it/s] 16% 205/1261 [01:20<07:33,  2.33it/s] 16% 206/1261 [01:20<07:20,  2.39it/s] 16% 207/1261 [01:21<07:10,  2.45it/s] 16% 208/1261 [01:21<06:52,  2.55it/s] 17% 209/1261 [01:21<06:54,  2.54it/s] 17% 210/1261 [01:22<07:03,  2.48it/s] 17% 211/1261 [01:22<07:05,  2.47it/s] 17% 212/1261 [01:23<07:22,  2.37it/s] 17% 213/1261 [01:23<07:10,  2.43it/s] 17% 214/1261 [01:23<06:59,  2.49it/s] 17% 215/1261 [01:24<06:56,  2.51it/s] 17% 216/1261 [01:24<06:58,  2.49it/s] 17% 217/1261 [01:25<06:53,  2.53it/s] 17% 218/1261 [01:25<06:41,  2.59it/s] 17% 219/1261 [01:25<06:52,  2.52it/s] 17% 220/1261 [01:26<07:02,  2.47it/s] 18% 221/1261 [01:26<07:15,  2.39it/s] 18% 222/1261 [01:27<07:02,  2.46it/s] 18% 223/1261 [01:27<07:04,  2.44it/s] 18% 224/1261 [01:28<07:11,  2.40it/s] 18% 225/1261 [01:28<07:20,  2.35it/s] 18% 226/1261 [01:28<07:14,  2.38it/s] 18% 227/1261 [01:29<07:03,  2.44it/s] 18% 228/1261 [01:29<07:02,  2.45it/s] 18% 229/1261 [01:30<07:06,  2.42it/s] 18% 230/1261 [01:30<06:54,  2.48it/s] 18% 231/1261 [01:30<06:48,  2.52it/s] 18% 232/1261 [01:31<06:44,  2.54it/s] 18% 233/1261 [01:31<06:47,  2.53it/s] 19% 234/1261 [01:32<06:40,  2.56it/s] 19% 235/1261 [01:32<06:46,  2.52it/s] 19% 236/1261 [01:32<06:42,  2.55it/s] 19% 237/1261 [01:33<06:47,  2.51it/s] 19% 238/1261 [01:33<06:40,  2.55it/s] 19% 239/1261 [01:33<06:31,  2.61it/s] 19% 240/1261 [01:34<06:31,  2.61it/s] 19% 241/1261 [01:34<06:32,  2.60it/s] 19% 242/1261 [01:35<06:38,  2.56it/s] 19% 243/1261 [01:35<06:35,  2.57it/s] 19% 244/1261 [01:35<06:35,  2.57it/s] 19% 245/1261 [01:36<06:33,  2.58it/s] 20% 246/1261 [01:36<06:57,  2.43it/s] 20% 247/1261 [01:37<07:08,  2.37it/s] 20% 248/1261 [01:37<06:59,  2.41it/s] 20% 249/1261 [01:37<06:45,  2.50it/s] 20% 250/1261 [01:38<06:33,  2.57it/s] 20% 251/1261 [01:38<07:00,  2.40it/s] 20% 252/1261 [01:39<06:48,  2.47it/s] 20% 253/1261 [01:39<06:48,  2.47it/s] 20% 254/1261 [01:40<06:41,  2.51it/s] 20% 255/1261 [01:40<06:55,  2.42it/s] 20% 256/1261 [01:40<06:51,  2.44it/s] 20% 257/1261 [01:41<06:50,  2.44it/s] 20% 258/1261 [01:41<06:42,  2.49it/s] 21% 259/1261 [01:42<06:52,  2.43it/s] 21% 260/1261 [01:42<06:51,  2.43it/s] 21% 261/1261 [01:42<06:53,  2.42it/s] 21% 262/1261 [01:43<07:03,  2.36it/s] 21% 263/1261 [01:43<07:00,  2.38it/s] 21% 264/1261 [01:44<07:00,  2.37it/s] 21% 265/1261 [01:44<07:02,  2.36it/s] 21% 266/1261 [01:45<06:57,  2.38it/s] 21% 267/1261 [01:45<06:47,  2.44it/s] 21% 268/1261 [01:45<06:46,  2.44it/s] 21% 269/1261 [01:46<06:38,  2.49it/s] 21% 270/1261 [01:46<06:33,  2.52it/s] 21% 271/1261 [01:46<06:34,  2.51it/s] 22% 272/1261 [01:47<06:23,  2.58it/s] 22% 273/1261 [01:47<06:23,  2.58it/s] 22% 274/1261 [01:48<06:42,  2.45it/s] 22% 275/1261 [01:48<06:48,  2.41it/s] 22% 276/1261 [01:49<06:45,  2.43it/s] 22% 277/1261 [01:49<06:42,  2.45it/s] 22% 278/1261 [01:49<06:50,  2.40it/s] 22% 279/1261 [01:50<06:52,  2.38it/s] 22% 280/1261 [01:50<06:47,  2.40it/s] 22% 281/1261 [01:51<06:43,  2.43it/s] 22% 282/1261 [01:51<06:53,  2.37it/s] 22% 283/1261 [01:51<06:46,  2.41it/s] 23% 284/1261 [01:52<06:35,  2.47it/s] 23% 285/1261 [01:52<06:38,  2.45it/s] 23% 286/1261 [01:53<06:46,  2.40it/s] 23% 287/1261 [01:53<06:48,  2.39it/s] 23% 288/1261 [01:53<06:37,  2.45it/s] 23% 289/1261 [01:54<06:36,  2.45it/s] 23% 290/1261 [01:54<06:36,  2.45it/s] 23% 291/1261 [01:55<06:38,  2.43it/s] 23% 292/1261 [01:55<06:29,  2.49it/s] 23% 293/1261 [01:56<06:28,  2.49it/s] 23% 294/1261 [01:56<06:21,  2.53it/s] 23% 295/1261 [01:56<06:15,  2.57it/s] 23% 296/1261 [01:57<06:20,  2.53it/s] 24% 297/1261 [01:57<06:24,  2.51it/s] 24% 298/1261 [01:58<06:40,  2.40it/s] 24% 299/1261 [01:58<06:34,  2.44it/s] 24% 300/1261 [01:58<06:32,  2.45it/s] 24% 301/1261 [01:59<06:36,  2.42it/s] 24% 302/1261 [01:59<06:31,  2.45it/s] 24% 303/1261 [02:00<06:26,  2.48it/s] 24% 304/1261 [02:00<06:14,  2.56it/s] 24% 305/1261 [02:00<06:15,  2.55it/s] 24% 306/1261 [02:01<06:10,  2.58it/s] 24% 307/1261 [02:01<06:10,  2.58it/s] 24% 308/1261 [02:01<06:03,  2.62it/s] 25% 309/1261 [02:02<06:02,  2.62it/s] 25% 310/1261 [02:02<06:06,  2.59it/s] 25% 311/1261 [02:03<06:11,  2.56it/s] 25% 312/1261 [02:03<06:05,  2.59it/s] 25% 313/1261 [02:03<06:19,  2.50it/s] 25% 314/1261 [02:04<06:40,  2.36it/s] 25% 315/1261 [02:04<06:24,  2.46it/s] 25% 316/1261 [02:05<06:13,  2.53it/s] 25% 317/1261 [02:05<06:01,  2.61it/s] 25% 318/1261 [02:05<06:04,  2.58it/s] 25% 319/1261 [02:06<06:14,  2.52it/s] 25% 320/1261 [02:06<06:14,  2.51it/s] 25% 321/1261 [02:07<06:23,  2.45it/s] 26% 322/1261 [02:07<06:25,  2.44it/s] 26% 323/1261 [02:07<06:19,  2.47it/s] 26% 324/1261 [02:08<06:05,  2.57it/s] 26% 325/1261 [02:08<06:05,  2.56it/s] 26% 326/1261 [02:09<05:59,  2.60it/s] 26% 327/1261 [02:09<05:57,  2.61it/s] 26% 328/1261 [02:09<05:51,  2.65it/s] 26% 329/1261 [02:10<05:46,  2.69it/s] 26% 330/1261 [02:10<06:09,  2.52it/s] 26% 331/1261 [02:11<06:17,  2.46it/s] 26% 332/1261 [02:11<06:05,  2.54it/s] 26% 333/1261 [02:11<06:01,  2.57it/s] 26% 334/1261 [02:12<06:06,  2.53it/s] 27% 335/1261 [02:12<06:12,  2.49it/s] 27% 336/1261 [02:13<06:17,  2.45it/s] 27% 337/1261 [02:13<06:19,  2.43it/s] 27% 338/1261 [02:13<06:36,  2.33it/s] 27% 339/1261 [02:14<06:23,  2.40it/s] 27% 340/1261 [02:14<06:20,  2.42it/s] 27% 341/1261 [02:15<07:08,  2.14it/s] 27% 342/1261 [02:15<07:25,  2.06it/s] 27% 343/1261 [02:16<07:08,  2.14it/s] 27% 344/1261 [02:16<07:20,  2.08it/s] 27% 345/1261 [02:17<07:10,  2.13it/s] 27% 346/1261 [02:17<07:38,  2.00it/s] 28% 347/1261 [02:18<07:12,  2.11it/s] 28% 348/1261 [02:18<06:58,  2.18it/s] 28% 349/1261 [02:19<06:37,  2.30it/s] 28% 350/1261 [02:19<06:36,  2.30it/s] 28% 351/1261 [02:19<07:05,  2.14it/s] 28% 352/1261 [02:20<06:46,  2.24it/s] 28% 353/1261 [02:20<06:41,  2.26it/s] 28% 354/1261 [02:21<06:40,  2.27it/s] 28% 355/1261 [02:21<07:08,  2.12it/s] 28% 356/1261 [02:22<06:45,  2.23it/s] 28% 357/1261 [02:22<06:47,  2.22it/s] 28% 358/1261 [02:23<06:46,  2.22it/s] 28% 359/1261 [02:23<07:05,  2.12it/s] 29% 360/1261 [02:24<06:45,  2.22it/s] 29% 361/1261 [02:24<06:30,  2.31it/s] 29% 362/1261 [02:24<06:35,  2.27it/s] 29% 363/1261 [02:25<06:36,  2.26it/s] 29% 364/1261 [02:25<06:26,  2.32it/s] 29% 365/1261 [02:26<06:29,  2.30it/s] 29% 366/1261 [02:26<06:37,  2.25it/s] 29% 367/1261 [02:27<07:03,  2.11it/s] 29% 368/1261 [02:27<06:53,  2.16it/s] 29% 369/1261 [02:28<07:05,  2.10it/s] 29% 370/1261 [02:28<07:05,  2.10it/s] 29% 371/1261 [02:29<06:56,  2.14it/s] 30% 372/1261 [02:29<07:09,  2.07it/s] 30% 373/1261 [02:30<06:55,  2.14it/s] 30% 374/1261 [02:30<06:34,  2.25it/s] 30% 375/1261 [02:30<06:42,  2.20it/s] 30% 376/1261 [02:31<06:27,  2.28it/s] 30% 377/1261 [02:31<06:28,  2.28it/s] 30% 378/1261 [02:32<07:00,  2.10it/s] 30% 379/1261 [02:32<07:00,  2.10it/s] 30% 380/1261 [02:33<06:43,  2.18it/s] 30% 381/1261 [02:33<06:29,  2.26it/s] 30% 382/1261 [02:33<06:17,  2.33it/s] 30% 383/1261 [02:34<06:23,  2.29it/s] 30% 384/1261 [02:35<07:17,  2.00it/s] 31% 385/1261 [02:35<07:11,  2.03it/s] 31% 386/1261 [02:35<06:57,  2.09it/s] 31% 387/1261 [02:36<06:47,  2.14it/s] 31% 388/1261 [02:36<06:34,  2.21it/s] 31% 389/1261 [02:37<06:31,  2.23it/s] 31% 390/1261 [02:37<06:27,  2.25it/s] 31% 391/1261 [02:38<06:31,  2.22it/s] 31% 392/1261 [02:38<06:24,  2.26it/s] 31% 393/1261 [02:39<06:39,  2.18it/s] 31% 394/1261 [02:39<06:42,  2.15it/s] 31% 395/1261 [02:40<06:55,  2.09it/s] 31% 396/1261 [02:40<06:47,  2.12it/s] 31% 397/1261 [02:40<06:38,  2.17it/s] 32% 398/1261 [02:41<06:32,  2.20it/s] 32% 399/1261 [02:41<06:44,  2.13it/s] 32% 400/1261 [02:42<06:44,  2.13it/s] 32% 401/1261 [02:42<06:45,  2.12it/s] 32% 402/1261 [02:43<06:36,  2.17it/s] 32% 403/1261 [02:43<06:45,  2.11it/s] 32% 404/1261 [02:44<06:30,  2.20it/s] 32% 405/1261 [02:44<06:34,  2.17it/s] 32% 406/1261 [02:45<06:32,  2.18it/s] 32% 407/1261 [02:45<06:25,  2.22it/s] 32% 408/1261 [02:46<06:23,  2.22it/s] 32% 409/1261 [02:46<06:24,  2.22it/s] 33% 410/1261 [02:46<06:19,  2.25it/s] 33% 411/1261 [02:47<06:24,  2.21it/s] 33% 412/1261 [02:47<06:40,  2.12it/s] 33% 413/1261 [02:48<06:40,  2.12it/s] 33% 414/1261 [02:48<06:25,  2.20it/s] 33% 415/1261 [02:49<06:32,  2.16it/s] 33% 416/1261 [02:49<06:32,  2.15it/s] 33% 417/1261 [02:50<06:39,  2.11it/s] 33% 418/1261 [02:50<06:45,  2.08it/s] 33% 419/1261 [02:51<06:42,  2.09it/s] 33% 420/1261 [02:51<06:48,  2.06it/s] 33% 421/1261 [02:52<06:54,  2.03it/s] 33% 422/1261 [02:52<06:49,  2.05it/s] 34% 423/1261 [02:53<06:47,  2.06it/s] 34% 424/1261 [02:53<06:38,  2.10it/s] 34% 425/1261 [02:54<06:38,  2.10it/s] 34% 426/1261 [02:54<06:38,  2.10it/s] 34% 427/1261 [02:55<06:43,  2.07it/s] 34% 428/1261 [02:55<06:29,  2.14it/s] 34% 429/1261 [02:56<06:37,  2.10it/s] 34% 430/1261 [02:56<06:14,  2.22it/s] 34% 431/1261 [02:56<06:05,  2.27it/s] 34% 432/1261 [02:57<06:08,  2.25it/s] 34% 433/1261 [02:57<06:03,  2.28it/s] 34% 434/1261 [02:58<06:12,  2.22it/s] 34% 435/1261 [02:58<06:09,  2.24it/s] 35% 436/1261 [02:59<05:59,  2.30it/s] 35% 437/1261 [02:59<06:13,  2.20it/s] 35% 438/1261 [02:59<05:59,  2.29it/s] 35% 439/1261 [03:00<05:52,  2.33it/s] 35% 440/1261 [03:00<05:50,  2.35it/s] 35% 441/1261 [03:01<05:46,  2.37it/s] 35% 442/1261 [03:01<05:58,  2.28it/s] 35% 443/1261 [03:02<06:03,  2.25it/s] 35% 444/1261 [03:02<06:10,  2.21it/s] 35% 445/1261 [03:03<06:18,  2.16it/s] 35% 446/1261 [03:03<06:12,  2.19it/s] 35% 447/1261 [03:03<06:08,  2.21it/s] 36% 448/1261 [03:04<06:05,  2.22it/s] 36% 449/1261 [03:04<06:05,  2.22it/s] 36% 450/1261 [03:05<05:57,  2.27it/s] 36% 451/1261 [03:05<05:54,  2.29it/s] 36% 452/1261 [03:06<05:49,  2.31it/s] 36% 453/1261 [03:06<05:50,  2.31it/s] 36% 454/1261 [03:07<05:52,  2.29it/s] 36% 455/1261 [03:07<06:02,  2.23it/s] 36% 456/1261 [03:07<05:57,  2.25it/s] 36% 457/1261 [03:08<06:06,  2.20it/s] 36% 458/1261 [03:08<06:09,  2.18it/s] 36% 459/1261 [03:09<07:12,  1.86it/s] 36% 460/1261 [03:10<07:10,  1.86it/s] 37% 461/1261 [03:10<06:49,  1.96it/s] 37% 462/1261 [03:11<06:34,  2.02it/s] 37% 463/1261 [03:11<06:26,  2.06it/s] 37% 464/1261 [03:11<06:08,  2.16it/s] 37% 465/1261 [03:12<06:07,  2.16it/s] 37% 466/1261 [03:12<06:05,  2.18it/s] 37% 467/1261 [03:13<05:58,  2.21it/s] 37% 468/1261 [03:13<06:03,  2.18it/s] 37% 469/1261 [03:14<06:11,  2.13it/s] 37% 470/1261 [03:14<05:56,  2.22it/s] 37% 471/1261 [03:15<05:53,  2.23it/s] 37% 472/1261 [03:15<05:45,  2.28it/s] 38% 473/1261 [03:16<06:09,  2.13it/s] 38% 474/1261 [03:16<06:02,  2.17it/s] 38% 475/1261 [03:16<06:09,  2.13it/s] 38% 476/1261 [03:17<06:15,  2.09it/s] 38% 477/1261 [03:17<06:19,  2.07it/s] 38% 478/1261 [03:18<06:18,  2.07it/s] 38% 479/1261 [03:18<06:25,  2.03it/s] 38% 480/1261 [03:19<06:29,  2.00it/s] 38% 481/1261 [03:19<06:16,  2.07it/s] 38% 482/1261 [03:20<06:12,  2.09it/s] 38% 483/1261 [03:20<06:05,  2.13it/s] 38% 484/1261 [03:21<05:46,  2.24it/s] 38% 485/1261 [03:21<05:48,  2.23it/s] 39% 486/1261 [03:22<05:54,  2.19it/s] 39% 487/1261 [03:22<05:52,  2.19it/s] 39% 488/1261 [03:23<05:50,  2.20it/s] 39% 489/1261 [03:23<05:56,  2.16it/s] 39% 490/1261 [03:24<06:03,  2.12it/s] 39% 491/1261 [03:24<06:03,  2.12it/s] 39% 492/1261 [03:24<05:51,  2.18it/s] 39% 493/1261 [03:25<05:43,  2.24it/s] 39% 494/1261 [03:25<05:55,  2.16it/s] 39% 495/1261 [03:26<05:58,  2.14it/s] 39% 496/1261 [03:26<05:51,  2.18it/s] 39% 497/1261 [03:27<05:56,  2.15it/s] 39% 498/1261 [03:27<05:55,  2.15it/s] 40% 499/1261 [03:28<06:05,  2.08it/s] 40% 500/1261 [03:28<06:14,  2.03it/s] 40% 501/1261 [03:29<06:13,  2.03it/s] 40% 502/1261 [03:29<06:28,  1.95it/s] 40% 503/1261 [03:30<06:55,  1.82it/s] 40% 504/1261 [03:30<06:35,  1.91it/s] 40% 505/1261 [03:31<06:29,  1.94it/s] 40% 506/1261 [03:32<06:55,  1.82it/s] 40% 507/1261 [03:32<06:32,  1.92it/s] 40% 508/1261 [03:33<06:39,  1.88it/s] 40% 509/1261 [03:33<07:04,  1.77it/s] 40% 510/1261 [03:34<06:38,  1.89it/s] 41% 511/1261 [03:34<06:18,  1.98it/s] 41% 512/1261 [03:35<06:37,  1.88it/s] 41% 513/1261 [03:35<06:24,  1.94it/s] 41% 514/1261 [03:36<06:17,  1.98it/s] 41% 515/1261 [03:36<07:03,  1.76it/s] 41% 516/1261 [03:37<07:33,  1.64it/s] 41% 517/1261 [03:37<07:00,  1.77it/s] 41% 518/1261 [03:38<07:01,  1.76it/s] 41% 519/1261 [03:39<07:38,  1.62it/s] 41% 520/1261 [03:40<07:58,  1.55it/s] 41% 521/1261 [03:40<07:30,  1.64it/s] 41% 522/1261 [03:41<07:49,  1.57it/s] 41% 523/1261 [03:41<07:59,  1.54it/s] 42% 524/1261 [03:43<09:37,  1.28it/s] 42% 525/1261 [03:43<09:13,  1.33it/s] 42% 526/1261 [03:44<09:31,  1.29it/s] 42% 527/1261 [03:45<10:21,  1.18it/s] 42% 528/1261 [03:46<09:27,  1.29it/s] 42% 529/1261 [03:46<08:19,  1.46it/s] 42% 530/1261 [03:47<07:37,  1.60it/s] 42% 531/1261 [03:47<06:40,  1.82it/s] 42% 532/1261 [03:47<06:18,  1.93it/s] 42% 533/1261 [03:48<05:51,  2.07it/s] 42% 534/1261 [03:48<05:54,  2.05it/s] 42% 535/1261 [03:49<05:48,  2.08it/s] 43% 536/1261 [03:49<05:38,  2.14it/s] 43% 537/1261 [03:50<05:42,  2.11it/s] 43% 538/1261 [03:50<05:32,  2.17it/s] 43% 539/1261 [03:51<05:33,  2.16it/s] 43% 540/1261 [03:51<05:32,  2.17it/s] 43% 541/1261 [03:51<05:21,  2.24it/s] 43% 542/1261 [03:52<06:10,  1.94it/s] 43% 543/1261 [03:53<07:07,  1.68it/s] 43% 544/1261 [03:54<07:26,  1.61it/s] 43% 545/1261 [03:54<07:45,  1.54it/s] 43% 546/1261 [03:56<09:45,  1.22it/s] 43% 547/1261 [03:56<09:00,  1.32it/s] 43% 548/1261 [03:57<07:49,  1.52it/s] 44% 549/1261 [03:57<07:03,  1.68it/s] 44% 550/1261 [03:57<06:28,  1.83it/s] 44% 551/1261 [03:58<06:04,  1.95it/s] 44% 552/1261 [03:58<05:37,  2.10it/s] 44% 553/1261 [03:59<05:24,  2.18it/s] 44% 554/1261 [03:59<05:26,  2.16it/s] 44% 555/1261 [04:00<05:14,  2.24it/s] 44% 556/1261 [04:00<05:00,  2.35it/s] 44% 557/1261 [04:00<04:55,  2.38it/s] 44% 558/1261 [04:01<04:51,  2.41it/s] 44% 559/1261 [04:01<04:46,  2.45it/s] 44% 560/1261 [04:02<04:55,  2.37it/s] 44% 561/1261 [04:02<04:55,  2.37it/s] 45% 562/1261 [04:03<05:29,  2.12it/s] 45% 563/1261 [04:03<05:44,  2.03it/s] 45% 564/1261 [04:04<05:37,  2.07it/s] 45% 565/1261 [04:04<05:42,  2.03it/s] 45% 566/1261 [04:05<05:48,  2.00it/s] 45% 567/1261 [04:05<05:44,  2.01it/s] 45% 568/1261 [04:06<05:28,  2.11it/s] 45% 569/1261 [04:06<05:56,  1.94it/s] 45% 570/1261 [04:07<06:46,  1.70it/s] 45% 571/1261 [04:08<06:48,  1.69it/s] 45% 572/1261 [04:08<06:45,  1.70it/s] 45% 573/1261 [04:09<06:48,  1.69it/s] 46% 574/1261 [04:09<06:28,  1.77it/s] 46% 575/1261 [04:10<06:06,  1.87it/s] 46% 576/1261 [04:10<05:51,  1.95it/s] 46% 577/1261 [04:11<05:41,  2.00it/s] 46% 578/1261 [04:11<05:27,  2.09it/s] 46% 579/1261 [04:12<05:26,  2.09it/s] 46% 580/1261 [04:12<05:14,  2.17it/s] 46% 581/1261 [04:12<05:22,  2.11it/s] 46% 582/1261 [04:13<05:14,  2.16it/s] 46% 583/1261 [04:13<05:07,  2.20it/s] 46% 584/1261 [04:14<04:51,  2.32it/s] 46% 585/1261 [04:14<04:56,  2.28it/s] 46% 586/1261 [04:15<04:58,  2.26it/s] 47% 587/1261 [04:15<04:54,  2.29it/s] 47% 588/1261 [04:15<04:50,  2.32it/s] 47% 589/1261 [04:16<05:05,  2.20it/s] 47% 590/1261 [04:16<05:02,  2.22it/s] 47% 591/1261 [04:17<04:57,  2.26it/s] 47% 592/1261 [04:17<04:49,  2.31it/s] 47% 593/1261 [04:18<04:57,  2.25it/s] 47% 594/1261 [04:18<04:53,  2.27it/s] 47% 595/1261 [04:19<04:56,  2.25it/s] 47% 596/1261 [04:19<04:56,  2.24it/s] 47% 597/1261 [04:20<05:01,  2.20it/s] 47% 598/1261 [04:20<04:57,  2.23it/s] 48% 599/1261 [04:20<04:54,  2.25it/s] 48% 600/1261 [04:21<04:48,  2.29it/s] 48% 601/1261 [04:21<04:41,  2.34it/s] 48% 602/1261 [04:22<04:43,  2.32it/s] 48% 603/1261 [04:22<04:44,  2.32it/s] 48% 604/1261 [04:23<04:46,  2.29it/s] 48% 605/1261 [04:23<04:51,  2.25it/s] 48% 606/1261 [04:23<04:40,  2.34it/s] 48% 607/1261 [04:24<04:41,  2.32it/s] 48% 608/1261 [04:24<04:42,  2.31it/s] 48% 609/1261 [04:25<04:44,  2.29it/s] 48% 610/1261 [04:25<04:46,  2.27it/s] 48% 611/1261 [04:26<05:04,  2.13it/s] 49% 612/1261 [04:26<04:59,  2.17it/s] 49% 613/1261 [04:27<04:56,  2.19it/s] 49% 614/1261 [04:27<04:49,  2.24it/s] 49% 615/1261 [04:27<04:49,  2.23it/s] 49% 616/1261 [04:28<04:41,  2.29it/s] 49% 617/1261 [04:28<04:32,  2.37it/s] 49% 618/1261 [04:29<04:28,  2.39it/s] 49% 619/1261 [04:29<04:35,  2.33it/s] 49% 620/1261 [04:30<04:32,  2.35it/s] 49% 621/1261 [04:30<04:33,  2.34it/s] 49% 622/1261 [04:30<04:24,  2.41it/s] 49% 623/1261 [04:31<04:30,  2.35it/s] 49% 624/1261 [04:31<04:31,  2.35it/s] 50% 625/1261 [04:32<04:38,  2.29it/s] 50% 626/1261 [04:32<04:50,  2.19it/s] 50% 627/1261 [04:33<04:53,  2.16it/s] 50% 628/1261 [04:33<04:58,  2.12it/s] 50% 629/1261 [04:34<04:52,  2.16it/s] 50% 630/1261 [04:34<04:36,  2.28it/s] 50% 631/1261 [04:34<04:32,  2.31it/s] 50% 632/1261 [04:35<04:32,  2.31it/s] 50% 633/1261 [04:35<04:22,  2.40it/s] 50% 634/1261 [04:36<04:23,  2.38it/s] 50% 635/1261 [04:36<04:34,  2.28it/s] 50% 636/1261 [04:37<04:30,  2.31it/s] 51% 637/1261 [04:37<04:34,  2.28it/s] 51% 638/1261 [04:37<04:36,  2.25it/s] 51% 639/1261 [04:38<04:47,  2.16it/s] 51% 640/1261 [04:38<04:42,  2.20it/s] 51% 641/1261 [04:39<04:41,  2.20it/s] 51% 642/1261 [04:39<04:37,  2.23it/s] 51% 643/1261 [04:40<04:41,  2.19it/s] 51% 644/1261 [04:40<04:42,  2.18it/s] 51% 645/1261 [04:41<04:39,  2.20it/s] 51% 646/1261 [04:41<04:31,  2.26it/s] 51% 647/1261 [04:42<04:30,  2.27it/s] 51% 648/1261 [04:42<04:18,  2.37it/s] 51% 649/1261 [04:42<04:24,  2.31it/s] 52% 650/1261 [04:43<04:26,  2.30it/s] 52% 651/1261 [04:43<04:29,  2.27it/s] 52% 652/1261 [04:44<04:34,  2.22it/s] 52% 653/1261 [04:44<04:28,  2.26it/s] 52% 654/1261 [04:45<04:27,  2.27it/s] 52% 655/1261 [04:45<04:34,  2.21it/s] 52% 656/1261 [04:45<04:23,  2.30it/s] 52% 657/1261 [04:46<04:12,  2.39it/s] 52% 658/1261 [04:46<04:01,  2.50it/s] 52% 659/1261 [04:47<04:00,  2.51it/s] 52% 660/1261 [04:47<03:52,  2.58it/s] 52% 661/1261 [04:47<04:02,  2.48it/s] 52% 662/1261 [04:48<04:05,  2.44it/s] 53% 663/1261 [04:48<04:11,  2.38it/s] 53% 664/1261 [04:49<04:19,  2.30it/s] 53% 665/1261 [04:49<04:30,  2.21it/s] 53% 666/1261 [04:50<04:35,  2.16it/s] 53% 667/1261 [04:50<04:19,  2.29it/s] 53% 668/1261 [04:51<04:23,  2.25it/s] 53% 669/1261 [04:51<04:27,  2.21it/s] 53% 670/1261 [04:52<04:32,  2.17it/s] 53% 671/1261 [04:52<04:28,  2.19it/s] 53% 672/1261 [04:52<04:25,  2.22it/s] 53% 673/1261 [04:53<04:15,  2.30it/s] 53% 674/1261 [04:53<04:15,  2.30it/s] 54% 675/1261 [04:54<04:17,  2.27it/s] 54% 676/1261 [04:54<04:01,  2.42it/s] 54% 677/1261 [04:54<04:08,  2.35it/s] 54% 678/1261 [04:55<04:12,  2.31it/s] 54% 679/1261 [04:55<04:15,  2.28it/s] 54% 680/1261 [04:56<04:08,  2.34it/s] 54% 681/1261 [04:56<04:24,  2.20it/s] 54% 682/1261 [04:57<04:19,  2.23it/s] 54% 683/1261 [04:57<04:05,  2.36it/s] 54% 684/1261 [04:58<04:06,  2.34it/s] 54% 685/1261 [04:58<04:12,  2.28it/s] 54% 686/1261 [04:58<04:07,  2.33it/s] 54% 687/1261 [04:59<03:56,  2.43it/s] 55% 688/1261 [04:59<03:47,  2.52it/s] 55% 689/1261 [05:00<03:47,  2.52it/s] 55% 690/1261 [05:00<03:49,  2.48it/s] 55% 691/1261 [05:00<04:01,  2.36it/s] 55% 692/1261 [05:01<03:51,  2.46it/s] 55% 693/1261 [05:01<03:49,  2.48it/s] 55% 694/1261 [05:02<03:44,  2.53it/s] 55% 695/1261 [05:02<03:48,  2.48it/s] 55% 696/1261 [05:02<03:49,  2.46it/s] 55% 697/1261 [05:03<03:47,  2.48it/s] 55% 698/1261 [05:03<03:42,  2.53it/s] 55% 699/1261 [05:04<03:54,  2.39it/s] 56% 700/1261 [05:04<03:44,  2.49it/s] 56% 701/1261 [05:04<03:42,  2.52it/s] 56% 702/1261 [05:05<03:35,  2.59it/s] 56% 703/1261 [05:05<03:43,  2.50it/s] 56% 704/1261 [05:06<03:48,  2.44it/s] 56% 705/1261 [05:06<03:45,  2.47it/s] 56% 706/1261 [05:06<03:45,  2.46it/s] 56% 707/1261 [05:07<04:03,  2.28it/s] 56% 708/1261 [05:07<04:03,  2.27it/s] 56% 709/1261 [05:08<04:02,  2.27it/s] 56% 710/1261 [05:08<03:59,  2.30it/s] 56% 711/1261 [05:09<03:51,  2.37it/s] 56% 712/1261 [05:09<03:47,  2.41it/s] 57% 713/1261 [05:09<03:47,  2.41it/s] 57% 714/1261 [05:10<03:55,  2.33it/s] 57% 715/1261 [05:10<04:03,  2.24it/s] 57% 716/1261 [05:11<04:04,  2.23it/s] 57% 717/1261 [05:11<03:59,  2.27it/s] 57% 718/1261 [05:12<04:00,  2.26it/s] 57% 719/1261 [05:12<03:58,  2.27it/s] 57% 720/1261 [05:13<03:52,  2.33it/s] 57% 721/1261 [05:13<03:53,  2.31it/s] 57% 722/1261 [05:13<03:58,  2.26it/s] 57% 723/1261 [05:14<03:53,  2.31it/s] 57% 724/1261 [05:14<03:51,  2.32it/s] 57% 725/1261 [05:15<03:51,  2.32it/s] 58% 726/1261 [05:15<03:51,  2.31it/s] 58% 727/1261 [05:16<03:59,  2.23it/s] 58% 728/1261 [05:16<03:53,  2.28it/s] 58% 729/1261 [05:17<03:49,  2.31it/s] 58% 730/1261 [05:17<03:44,  2.37it/s] 58% 731/1261 [05:17<03:49,  2.31it/s] 58% 732/1261 [05:18<03:47,  2.32it/s] 58% 733/1261 [05:18<03:50,  2.29it/s] 58% 734/1261 [05:19<03:49,  2.29it/s] 58% 735/1261 [05:19<03:53,  2.25it/s] 58% 736/1261 [05:20<03:43,  2.35it/s] 58% 737/1261 [05:20<03:44,  2.34it/s] 59% 738/1261 [05:20<03:36,  2.41it/s] 59% 739/1261 [05:21<03:53,  2.23it/s] 59% 740/1261 [05:21<03:58,  2.19it/s] 59% 741/1261 [05:22<03:54,  2.22it/s] 59% 742/1261 [05:22<03:54,  2.21it/s] 59% 743/1261 [05:23<03:56,  2.19it/s] 59% 744/1261 [05:23<04:02,  2.14it/s] 59% 745/1261 [05:24<04:01,  2.13it/s] 59% 746/1261 [05:24<03:48,  2.25it/s] 59% 747/1261 [05:25<03:57,  2.16it/s] 59% 748/1261 [05:25<03:56,  2.17it/s] 59% 749/1261 [05:25<03:50,  2.22it/s] 59% 750/1261 [05:26<03:42,  2.30it/s] 60% 751/1261 [05:26<03:37,  2.35it/s] 60% 752/1261 [05:27<03:30,  2.42it/s] 60% 753/1261 [05:27<03:23,  2.49it/s] 60% 754/1261 [05:27<03:25,  2.46it/s] 60% 755/1261 [05:28<03:24,  2.48it/s] 60% 756/1261 [05:28<03:35,  2.35it/s] 60% 757/1261 [05:29<03:30,  2.40it/s] 60% 758/1261 [05:29<03:28,  2.41it/s] 60% 759/1261 [05:30<03:39,  2.29it/s] 60% 760/1261 [05:30<03:34,  2.33it/s] 60% 761/1261 [05:30<03:34,  2.33it/s] 60% 762/1261 [05:31<03:25,  2.43it/s] 61% 763/1261 [05:31<03:24,  2.43it/s] 61% 764/1261 [05:32<03:24,  2.43it/s] 61% 765/1261 [05:32<03:27,  2.39it/s] 61% 766/1261 [05:32<03:23,  2.43it/s] 61% 767/1261 [05:33<03:29,  2.35it/s] 61% 768/1261 [05:33<03:30,  2.35it/s] 61% 769/1261 [05:34<03:21,  2.45it/s] 61% 770/1261 [05:34<03:13,  2.54it/s] 61% 771/1261 [05:34<03:16,  2.49it/s] 61% 772/1261 [05:35<03:12,  2.54it/s] 61% 773/1261 [05:35<03:14,  2.51it/s] 61% 774/1261 [05:36<03:17,  2.47it/s] 61% 775/1261 [05:36<03:21,  2.41it/s] 62% 776/1261 [05:37<03:26,  2.35it/s] 62% 777/1261 [05:37<04:04,  1.98it/s] 62% 778/1261 [05:38<03:45,  2.14it/s] 62% 779/1261 [05:38<03:41,  2.18it/s] 62% 780/1261 [05:39<03:36,  2.22it/s] 62% 781/1261 [05:39<03:38,  2.20it/s] 62% 782/1261 [05:39<03:31,  2.27it/s] 62% 783/1261 [05:40<03:29,  2.28it/s] 62% 784/1261 [05:40<03:32,  2.24it/s] 62% 785/1261 [05:41<03:41,  2.15it/s] 62% 786/1261 [05:41<03:40,  2.16it/s] 62% 787/1261 [05:42<03:42,  2.13it/s] 62% 788/1261 [05:42<03:36,  2.19it/s] 63% 789/1261 [05:43<03:32,  2.22it/s] 63% 790/1261 [05:43<03:19,  2.36it/s] 63% 791/1261 [05:43<03:16,  2.39it/s] 63% 792/1261 [05:44<03:13,  2.42it/s] 63% 793/1261 [05:44<03:19,  2.35it/s] 63% 794/1261 [05:45<03:16,  2.37it/s] 63% 795/1261 [05:45<03:11,  2.44it/s] 63% 796/1261 [05:45<03:11,  2.43it/s] 63% 797/1261 [05:46<03:09,  2.45it/s] 63% 798/1261 [05:46<03:07,  2.47it/s] 63% 799/1261 [05:47<03:09,  2.44it/s] 63% 800/1261 [05:47<03:08,  2.45it/s] 64% 801/1261 [05:47<03:06,  2.47it/s] 64% 802/1261 [05:48<03:00,  2.55it/s] 64% 803/1261 [05:48<02:58,  2.57it/s] 64% 804/1261 [05:49<02:59,  2.54it/s] 64% 805/1261 [05:49<03:09,  2.41it/s] 64% 806/1261 [05:49<03:09,  2.40it/s] 64% 807/1261 [05:50<03:12,  2.36it/s] 64% 808/1261 [05:50<03:05,  2.44it/s] 64% 809/1261 [05:51<03:02,  2.47it/s] 64% 810/1261 [05:51<03:02,  2.47it/s] 64% 811/1261 [05:52<03:07,  2.40it/s] 64% 812/1261 [05:52<03:08,  2.38it/s] 64% 813/1261 [05:52<03:07,  2.38it/s] 65% 814/1261 [05:53<03:11,  2.33it/s] 65% 815/1261 [05:53<03:09,  2.36it/s] 65% 816/1261 [05:54<03:02,  2.44it/s] 65% 817/1261 [05:54<02:57,  2.50it/s] 65% 818/1261 [05:54<02:57,  2.50it/s] 65% 819/1261 [05:55<02:54,  2.53it/s] 65% 820/1261 [05:55<02:59,  2.46it/s] 65% 821/1261 [05:56<03:04,  2.38it/s] 65% 822/1261 [05:56<03:06,  2.35it/s] 65% 823/1261 [05:57<03:12,  2.28it/s] 65% 824/1261 [05:57<03:08,  2.31it/s] 65% 825/1261 [05:57<03:07,  2.32it/s] 66% 826/1261 [05:58<03:17,  2.20it/s] 66% 827/1261 [05:58<03:19,  2.18it/s] 66% 828/1261 [05:59<03:15,  2.21it/s] 66% 829/1261 [05:59<03:09,  2.28it/s] 66% 830/1261 [06:00<03:14,  2.22it/s] 66% 831/1261 [06:00<03:14,  2.22it/s] 66% 832/1261 [06:01<03:23,  2.11it/s] 66% 833/1261 [06:01<03:16,  2.18it/s] 66% 834/1261 [06:02<03:14,  2.20it/s] 66% 835/1261 [06:02<03:11,  2.23it/s] 66% 836/1261 [06:02<03:09,  2.24it/s] 66% 837/1261 [06:03<03:03,  2.31it/s] 66% 838/1261 [06:03<02:56,  2.40it/s] 67% 839/1261 [06:04<02:56,  2.39it/s] 67% 840/1261 [06:04<02:51,  2.46it/s] 67% 841/1261 [06:04<02:53,  2.42it/s] 67% 842/1261 [06:05<02:51,  2.45it/s] 67% 843/1261 [06:05<02:54,  2.40it/s] 67% 844/1261 [06:06<02:53,  2.41it/s] 67% 845/1261 [06:06<02:58,  2.33it/s] 67% 846/1261 [06:07<02:59,  2.32it/s] 67% 847/1261 [06:07<03:01,  2.28it/s] 67% 848/1261 [06:07<03:00,  2.29it/s] 67% 849/1261 [06:08<03:00,  2.29it/s] 67% 850/1261 [06:08<02:51,  2.40it/s] 67% 851/1261 [06:09<02:50,  2.40it/s] 68% 852/1261 [06:09<03:04,  2.22it/s] 68% 853/1261 [06:10<03:02,  2.23it/s] 68% 854/1261 [06:10<02:54,  2.33it/s] 68% 855/1261 [06:11<02:54,  2.33it/s] 68% 856/1261 [06:11<02:47,  2.41it/s] 68% 857/1261 [06:11<02:54,  2.32it/s] 68% 858/1261 [06:12<02:55,  2.29it/s] 68% 859/1261 [06:12<02:56,  2.28it/s] 68% 860/1261 [06:13<02:52,  2.32it/s] 68% 861/1261 [06:13<03:01,  2.21it/s] 68% 862/1261 [06:14<02:55,  2.27it/s] 68% 863/1261 [06:14<02:54,  2.28it/s] 69% 864/1261 [06:14<02:48,  2.36it/s] 69% 865/1261 [06:15<02:49,  2.33it/s] 69% 866/1261 [06:15<02:50,  2.32it/s] 69% 867/1261 [06:16<02:46,  2.36it/s] 69% 868/1261 [06:16<02:37,  2.49it/s] 69% 869/1261 [06:16<02:38,  2.47it/s] 69% 870/1261 [06:17<02:33,  2.55it/s] 69% 871/1261 [06:17<02:34,  2.53it/s] 69% 872/1261 [06:18<02:35,  2.50it/s] 69% 873/1261 [06:18<02:32,  2.55it/s] 69% 874/1261 [06:18<02:41,  2.40it/s] 69% 875/1261 [06:19<02:42,  2.37it/s] 69% 876/1261 [06:19<02:45,  2.33it/s] 70% 877/1261 [06:20<02:47,  2.29it/s] 70% 878/1261 [06:20<02:48,  2.27it/s] 70% 879/1261 [06:21<02:48,  2.26it/s] 70% 880/1261 [06:21<02:50,  2.23it/s] 70% 881/1261 [06:22<02:52,  2.20it/s] 70% 882/1261 [06:22<02:49,  2.23it/s] 70% 883/1261 [06:23<02:47,  2.26it/s] 70% 884/1261 [06:23<02:46,  2.26it/s] 70% 885/1261 [06:23<02:45,  2.27it/s] 70% 886/1261 [06:24<02:43,  2.29it/s] 70% 887/1261 [06:24<02:44,  2.27it/s] 70% 888/1261 [06:25<02:45,  2.25it/s] 70% 889/1261 [06:25<02:45,  2.24it/s] 71% 890/1261 [06:26<02:48,  2.20it/s] 71% 891/1261 [06:26<02:43,  2.27it/s] 71% 892/1261 [06:26<02:39,  2.31it/s] 71% 893/1261 [06:27<02:45,  2.22it/s] 71% 894/1261 [06:27<02:39,  2.30it/s] 71% 895/1261 [06:28<02:37,  2.32it/s] 71% 896/1261 [06:28<02:32,  2.39it/s] 71% 897/1261 [06:29<02:35,  2.34it/s] 71% 898/1261 [06:29<02:44,  2.21it/s] 71% 899/1261 [06:30<02:40,  2.25it/s] 71% 900/1261 [06:30<02:36,  2.31it/s] 71% 901/1261 [06:30<02:40,  2.25it/s] 72% 902/1261 [06:31<02:42,  2.21it/s] 72% 903/1261 [06:31<02:38,  2.25it/s] 72% 904/1261 [06:32<02:36,  2.28it/s] 72% 905/1261 [06:32<02:34,  2.30it/s] 72% 906/1261 [06:33<02:30,  2.36it/s] 72% 907/1261 [06:33<02:32,  2.32it/s] 72% 908/1261 [06:33<02:30,  2.35it/s] 72% 909/1261 [06:34<02:27,  2.38it/s] 72% 910/1261 [06:34<02:22,  2.46it/s] 72% 911/1261 [06:35<02:21,  2.48it/s] 72% 912/1261 [06:35<02:18,  2.53it/s] 72% 913/1261 [06:35<02:28,  2.35it/s] 72% 914/1261 [06:36<02:27,  2.36it/s] 73% 915/1261 [06:36<02:32,  2.27it/s] 73% 916/1261 [06:37<02:31,  2.28it/s] 73% 917/1261 [06:37<02:34,  2.23it/s] 73% 918/1261 [06:38<02:36,  2.19it/s] 73% 919/1261 [06:38<02:35,  2.19it/s] 73% 920/1261 [06:39<02:30,  2.27it/s] 73% 921/1261 [06:39<02:29,  2.28it/s] 73% 922/1261 [06:40<02:32,  2.22it/s] 73% 923/1261 [06:40<02:33,  2.21it/s] 73% 924/1261 [06:40<02:27,  2.29it/s] 73% 925/1261 [06:41<02:25,  2.30it/s] 73% 926/1261 [06:41<02:21,  2.37it/s] 74% 927/1261 [06:42<02:28,  2.25it/s] 74% 928/1261 [06:42<02:23,  2.32it/s] 74% 929/1261 [06:43<02:23,  2.32it/s] 74% 930/1261 [06:43<02:21,  2.34it/s] 74% 931/1261 [06:43<02:23,  2.31it/s] 74% 932/1261 [06:44<02:22,  2.31it/s] 74% 933/1261 [06:44<02:25,  2.25it/s] 74% 934/1261 [06:45<02:24,  2.27it/s] 74% 935/1261 [06:45<02:23,  2.26it/s] 74% 936/1261 [06:46<02:24,  2.25it/s] 74% 937/1261 [06:46<02:48,  1.92it/s] 74% 938/1261 [06:47<02:46,  1.94it/s] 74% 939/1261 [06:47<02:46,  1.94it/s] 75% 940/1261 [06:48<02:35,  2.06it/s] 75% 941/1261 [06:48<02:34,  2.07it/s] 75% 942/1261 [06:49<02:31,  2.11it/s] 75% 943/1261 [06:49<02:21,  2.24it/s] 75% 944/1261 [06:49<02:16,  2.33it/s] 75% 945/1261 [06:50<02:11,  2.41it/s] 75% 946/1261 [06:50<02:15,  2.32it/s] 75% 947/1261 [06:51<02:21,  2.23it/s] 75% 948/1261 [06:51<02:20,  2.22it/s] 75% 949/1261 [06:52<02:34,  2.02it/s] 75% 950/1261 [06:52<02:39,  1.95it/s] 75% 951/1261 [06:53<02:34,  2.00it/s] 75% 952/1261 [06:53<02:28,  2.09it/s] 76% 953/1261 [06:54<02:17,  2.23it/s] 76% 954/1261 [06:54<02:20,  2.19it/s] 76% 955/1261 [06:55<02:14,  2.28it/s] 76% 956/1261 [06:55<02:31,  2.02it/s] 76% 957/1261 [06:56<02:47,  1.82it/s] 76% 958/1261 [06:57<02:58,  1.70it/s] 76% 959/1261 [06:57<02:43,  1.84it/s] 76% 960/1261 [06:57<02:32,  1.97it/s] 76% 961/1261 [06:58<02:35,  1.93it/s] 76% 962/1261 [06:59<02:54,  1.71it/s] 76% 963/1261 [06:59<02:59,  1.66it/s] 76% 964/1261 [07:00<02:53,  1.71it/s] 77% 965/1261 [07:01<03:05,  1.59it/s] 77% 966/1261 [07:01<03:09,  1.56it/s] 77% 967/1261 [07:02<03:05,  1.59it/s] 77% 968/1261 [07:03<03:06,  1.57it/s] 77% 969/1261 [07:03<02:53,  1.68it/s] 77% 970/1261 [07:04<02:45,  1.76it/s] 77% 971/1261 [07:04<02:37,  1.84it/s] 77% 972/1261 [07:05<02:32,  1.90it/s] 77% 973/1261 [07:05<02:24,  2.00it/s] 77% 974/1261 [07:05<02:21,  2.03it/s] 77% 975/1261 [07:06<02:19,  2.06it/s] 77% 976/1261 [07:06<02:16,  2.09it/s] 77% 977/1261 [07:07<02:17,  2.07it/s] 78% 978/1261 [07:07<02:13,  2.12it/s] 78% 979/1261 [07:08<02:14,  2.10it/s] 78% 980/1261 [07:08<02:18,  2.03it/s] 78% 981/1261 [07:09<02:20,  1.99it/s] 78% 982/1261 [07:09<02:16,  2.05it/s] 78% 983/1261 [07:10<02:20,  1.98it/s] 78% 984/1261 [07:10<02:16,  2.03it/s] 78% 985/1261 [07:11<02:33,  1.79it/s] 78% 986/1261 [07:12<02:34,  1.78it/s] 78% 987/1261 [07:12<02:38,  1.72it/s] 78% 988/1261 [07:13<02:49,  1.61it/s] 78% 989/1261 [07:14<03:01,  1.50it/s] 79% 990/1261 [07:14<03:08,  1.44it/s] 79% 991/1261 [07:15<03:06,  1.45it/s] 79% 992/1261 [07:16<03:09,  1.42it/s] 79% 993/1261 [07:16<02:50,  1.57it/s] 79% 994/1261 [07:17<02:40,  1.66it/s] 79% 995/1261 [07:17<02:41,  1.64it/s] 79% 996/1261 [07:18<02:34,  1.72it/s] 79% 997/1261 [07:19<02:31,  1.74it/s] 79% 998/1261 [07:19<02:32,  1.72it/s] 79% 999/1261 [07:20<02:24,  1.82it/s] 79% 1000/1261 [07:20<02:12,  1.97it/s] 79% 1001/1261 [07:21<02:08,  2.02it/s] 79% 1002/1261 [07:21<01:59,  2.16it/s] 80% 1003/1261 [07:21<01:58,  2.18it/s] 80% 1004/1261 [07:22<02:00,  2.13it/s] 80% 1005/1261 [07:22<01:55,  2.22it/s] 80% 1006/1261 [07:23<01:57,  2.17it/s] 80% 1007/1261 [07:23<01:55,  2.19it/s] 80% 1008/1261 [07:24<01:53,  2.22it/s] 80% 1009/1261 [07:24<01:52,  2.23it/s] 80% 1010/1261 [07:25<01:52,  2.23it/s] 80% 1011/1261 [07:25<01:52,  2.22it/s] 80% 1012/1261 [07:25<01:51,  2.22it/s] 80% 1013/1261 [07:26<01:51,  2.23it/s] 80% 1014/1261 [07:26<01:53,  2.18it/s] 80% 1015/1261 [07:27<01:50,  2.22it/s] 81% 1016/1261 [07:27<01:51,  2.21it/s] 81% 1017/1261 [07:28<01:49,  2.23it/s] 81% 1018/1261 [07:28<01:52,  2.15it/s] 81% 1019/1261 [07:29<01:45,  2.29it/s] 81% 1020/1261 [07:29<01:40,  2.39it/s] 81% 1021/1261 [07:29<01:39,  2.41it/s] 81% 1022/1261 [07:30<01:46,  2.24it/s] 81% 1023/1261 [07:30<01:49,  2.18it/s] 81% 1024/1261 [07:31<01:50,  2.14it/s] 81% 1025/1261 [07:31<01:50,  2.14it/s] 81% 1026/1261 [07:32<01:49,  2.14it/s] 81% 1027/1261 [07:32<01:50,  2.12it/s] 82% 1028/1261 [07:33<01:47,  2.17it/s] 82% 1029/1261 [07:33<01:44,  2.22it/s] 82% 1030/1261 [07:34<01:44,  2.20it/s] 82% 1031/1261 [07:34<01:41,  2.26it/s] 82% 1032/1261 [07:34<01:42,  2.24it/s] 82% 1033/1261 [07:35<01:41,  2.24it/s] 82% 1034/1261 [07:35<01:44,  2.18it/s] 82% 1035/1261 [07:36<01:47,  2.11it/s] 82% 1036/1261 [07:36<01:47,  2.09it/s] 82% 1037/1261 [07:37<01:44,  2.15it/s] 82% 1038/1261 [07:37<01:44,  2.14it/s] 82% 1039/1261 [07:38<01:42,  2.17it/s] 82% 1040/1261 [07:38<01:42,  2.16it/s] 83% 1041/1261 [07:39<01:39,  2.21it/s] 83% 1042/1261 [07:39<01:33,  2.33it/s] 83% 1043/1261 [07:39<01:36,  2.27it/s] 83% 1044/1261 [07:41<02:27,  1.48it/s] 83% 1045/1261 [07:41<02:04,  1.74it/s] 83% 1046/1261 [07:41<01:53,  1.89it/s] 83% 1047/1261 [07:42<01:44,  2.04it/s] 83% 1048/1261 [07:42<01:39,  2.14it/s] 83% 1049/1261 [07:43<01:37,  2.17it/s] 83% 1050/1261 [07:43<01:34,  2.22it/s] 83% 1051/1261 [07:43<01:29,  2.34it/s] 83% 1052/1261 [07:44<01:26,  2.43it/s] 84% 1053/1261 [07:44<01:25,  2.44it/s] 84% 1054/1261 [07:45<01:29,  2.31it/s] 84% 1055/1261 [07:45<01:30,  2.27it/s] 84% 1056/1261 [07:46<01:30,  2.27it/s] 84% 1057/1261 [07:46<01:27,  2.34it/s] 84% 1058/1261 [07:47<01:30,  2.23it/s] 84% 1059/1261 [07:47<01:29,  2.24it/s] 84% 1060/1261 [07:47<01:32,  2.18it/s] 84% 1061/1261 [07:48<01:29,  2.23it/s] 84% 1062/1261 [07:48<01:29,  2.23it/s] 84% 1063/1261 [07:49<01:32,  2.14it/s] 84% 1064/1261 [07:49<01:29,  2.20it/s] 84% 1065/1261 [07:50<01:28,  2.21it/s] 85% 1066/1261 [07:50<01:28,  2.20it/s] 85% 1067/1261 [07:51<01:29,  2.17it/s] 85% 1068/1261 [07:51<01:26,  2.24it/s] 85% 1069/1261 [07:52<01:25,  2.25it/s] 85% 1070/1261 [07:52<01:25,  2.23it/s] 85% 1071/1261 [07:52<01:26,  2.19it/s] 85% 1072/1261 [07:53<01:22,  2.29it/s] 85% 1073/1261 [07:53<01:17,  2.42it/s] 85% 1074/1261 [07:54<01:15,  2.48it/s] 85% 1075/1261 [07:54<01:14,  2.49it/s] 85% 1076/1261 [07:54<01:15,  2.46it/s] 85% 1077/1261 [07:55<01:17,  2.37it/s] 85% 1078/1261 [07:55<01:18,  2.34it/s] 86% 1079/1261 [07:56<01:15,  2.41it/s] 86% 1080/1261 [07:56<01:14,  2.42it/s] 86% 1081/1261 [07:56<01:12,  2.47it/s] 86% 1082/1261 [07:57<01:15,  2.36it/s] 86% 1083/1261 [07:57<01:14,  2.38it/s] 86% 1084/1261 [07:58<01:18,  2.26it/s] 86% 1085/1261 [07:58<01:20,  2.18it/s] 86% 1086/1261 [07:59<01:19,  2.19it/s] 86% 1087/1261 [07:59<01:20,  2.16it/s] 86% 1088/1261 [08:00<01:19,  2.16it/s] 86% 1089/1261 [08:00<01:16,  2.25it/s] 86% 1090/1261 [08:01<01:15,  2.25it/s] 87% 1091/1261 [08:01<01:11,  2.36it/s] 87% 1092/1261 [08:01<01:11,  2.36it/s] 87% 1093/1261 [08:02<01:12,  2.31it/s] 87% 1094/1261 [08:02<01:12,  2.32it/s] 87% 1095/1261 [08:03<01:09,  2.40it/s] 87% 1096/1261 [08:03<01:07,  2.44it/s] 87% 1097/1261 [08:03<01:06,  2.47it/s] 87% 1098/1261 [08:04<01:07,  2.40it/s] 87% 1099/1261 [08:04<01:09,  2.34it/s] 87% 1100/1261 [08:05<01:12,  2.22it/s] 87% 1101/1261 [08:05<01:12,  2.20it/s] 87% 1102/1261 [08:06<01:11,  2.22it/s] 87% 1103/1261 [08:06<01:12,  2.17it/s] 88% 1104/1261 [08:07<01:12,  2.16it/s] 88% 1105/1261 [08:07<01:11,  2.19it/s] 88% 1106/1261 [08:08<01:11,  2.16it/s] 88% 1107/1261 [08:08<01:12,  2.11it/s] 88% 1108/1261 [08:09<01:11,  2.13it/s] 88% 1109/1261 [08:09<01:10,  2.16it/s] 88% 1110/1261 [08:10<01:10,  2.13it/s] 88% 1111/1261 [08:10<01:09,  2.15it/s] 88% 1112/1261 [08:10<01:06,  2.25it/s] 88% 1113/1261 [08:11<01:07,  2.21it/s] 88% 1114/1261 [08:11<01:07,  2.18it/s] 88% 1115/1261 [08:12<01:05,  2.23it/s] 89% 1116/1261 [08:12<01:03,  2.29it/s] 89% 1117/1261 [08:13<01:03,  2.28it/s] 89% 1118/1261 [08:13<01:02,  2.29it/s] 89% 1119/1261 [08:13<01:03,  2.24it/s] 89% 1120/1261 [08:14<01:01,  2.30it/s] 89% 1121/1261 [08:14<01:01,  2.27it/s] 89% 1122/1261 [08:15<01:02,  2.21it/s] 89% 1123/1261 [08:15<01:00,  2.28it/s] 89% 1124/1261 [08:16<01:00,  2.25it/s] 89% 1125/1261 [08:16<01:01,  2.20it/s] 89% 1126/1261 [08:17<01:00,  2.22it/s] 89% 1127/1261 [08:17<01:00,  2.22it/s] 89% 1128/1261 [08:18<01:00,  2.21it/s] 90% 1129/1261 [08:18<00:58,  2.24it/s] 90% 1130/1261 [08:18<00:56,  2.31it/s] 90% 1131/1261 [08:19<00:55,  2.34it/s] 90% 1132/1261 [08:19<00:54,  2.35it/s] 90% 1133/1261 [08:20<00:55,  2.30it/s] 90% 1134/1261 [08:20<00:55,  2.28it/s] 90% 1135/1261 [08:20<00:53,  2.34it/s] 90% 1136/1261 [08:21<00:53,  2.33it/s] 90% 1137/1261 [08:21<00:54,  2.29it/s] 90% 1138/1261 [08:22<00:51,  2.37it/s] 90% 1139/1261 [08:22<00:53,  2.30it/s] 90% 1140/1261 [08:23<00:52,  2.29it/s] 90% 1141/1261 [08:23<00:52,  2.27it/s] 91% 1142/1261 [08:24<00:53,  2.23it/s] 91% 1143/1261 [08:24<00:51,  2.27it/s] 91% 1144/1261 [08:24<00:50,  2.32it/s] 91% 1145/1261 [08:25<00:50,  2.29it/s] 91% 1146/1261 [08:25<00:49,  2.30it/s] 91% 1147/1261 [08:26<00:50,  2.28it/s] 91% 1148/1261 [08:26<00:51,  2.21it/s] 91% 1149/1261 [08:27<00:51,  2.16it/s] 91% 1150/1261 [08:27<00:50,  2.19it/s] 91% 1151/1261 [08:28<00:50,  2.16it/s] 91% 1152/1261 [08:28<00:48,  2.25it/s] 91% 1153/1261 [08:28<00:45,  2.35it/s] 92% 1154/1261 [08:29<00:44,  2.40it/s] 92% 1155/1261 [08:29<00:44,  2.36it/s] 92% 1156/1261 [08:30<00:43,  2.39it/s] 92% 1157/1261 [08:30<00:44,  2.32it/s] 92% 1158/1261 [08:31<00:45,  2.28it/s] 92% 1159/1261 [08:31<00:43,  2.32it/s] 92% 1160/1261 [08:31<00:42,  2.37it/s] 92% 1161/1261 [08:32<00:41,  2.39it/s] 92% 1162/1261 [08:32<00:40,  2.46it/s] 92% 1163/1261 [08:33<00:39,  2.47it/s] 92% 1164/1261 [08:33<00:38,  2.54it/s] 92% 1165/1261 [08:33<00:38,  2.49it/s] 92% 1166/1261 [08:34<00:38,  2.47it/s] 93% 1167/1261 [08:34<00:38,  2.45it/s] 93% 1168/1261 [08:35<00:38,  2.42it/s] 93% 1169/1261 [08:35<00:39,  2.35it/s] 93% 1170/1261 [08:35<00:37,  2.45it/s] 93% 1171/1261 [08:36<00:37,  2.39it/s] 93% 1172/1261 [08:36<00:38,  2.30it/s] 93% 1173/1261 [08:37<00:39,  2.25it/s] 93% 1174/1261 [08:37<00:38,  2.26it/s] 93% 1175/1261 [08:38<00:38,  2.22it/s] 93% 1176/1261 [08:38<00:39,  2.15it/s] 93% 1177/1261 [08:39<00:37,  2.24it/s] 93% 1178/1261 [08:39<00:35,  2.31it/s] 93% 1179/1261 [08:39<00:34,  2.35it/s] 94% 1180/1261 [08:40<00:33,  2.39it/s] 94% 1181/1261 [08:40<00:33,  2.37it/s] 94% 1182/1261 [08:41<00:34,  2.29it/s] 94% 1183/1261 [08:41<00:35,  2.22it/s] 94% 1184/1261 [08:42<00:32,  2.35it/s] 94% 1185/1261 [08:42<00:32,  2.37it/s] 94% 1186/1261 [08:42<00:31,  2.40it/s] 94% 1187/1261 [08:43<00:31,  2.38it/s] 94% 1188/1261 [08:43<00:31,  2.33it/s] 94% 1189/1261 [08:44<00:30,  2.37it/s] 94% 1190/1261 [08:44<00:30,  2.35it/s] 94% 1191/1261 [08:45<00:29,  2.36it/s] 95% 1192/1261 [08:45<00:28,  2.40it/s] 95% 1193/1261 [08:45<00:28,  2.42it/s] 95% 1194/1261 [08:46<00:28,  2.33it/s] 95% 1195/1261 [08:46<00:28,  2.34it/s] 95% 1196/1261 [08:47<00:27,  2.40it/s] 95% 1197/1261 [08:47<00:27,  2.32it/s] 95% 1198/1261 [08:48<00:26,  2.34it/s] 95% 1199/1261 [08:48<00:26,  2.34it/s] 95% 1200/1261 [08:48<00:25,  2.38it/s] 95% 1201/1261 [08:49<00:25,  2.38it/s] 95% 1202/1261 [08:49<00:25,  2.28it/s] 95% 1203/1261 [08:50<00:24,  2.32it/s] 95% 1204/1261 [08:50<00:25,  2.24it/s] 96% 1205/1261 [08:51<00:25,  2.24it/s] 96% 1206/1261 [08:51<00:23,  2.31it/s] 96% 1207/1261 [08:51<00:23,  2.33it/s] 96% 1208/1261 [08:52<00:23,  2.23it/s] 96% 1209/1261 [08:52<00:23,  2.23it/s] 96% 1210/1261 [08:53<00:22,  2.31it/s] 96% 1211/1261 [08:53<00:21,  2.28it/s] 96% 1212/1261 [08:54<00:21,  2.32it/s] 96% 1213/1261 [08:54<00:20,  2.29it/s] 96% 1214/1261 [08:55<00:20,  2.26it/s] 96% 1215/1261 [08:55<00:20,  2.23it/s] 96% 1216/1261 [08:55<00:19,  2.27it/s] 97% 1217/1261 [08:56<00:19,  2.24it/s] 97% 1218/1261 [08:56<00:19,  2.21it/s] 97% 1219/1261 [08:57<00:20,  2.04it/s] 97% 1220/1261 [08:57<00:20,  2.04it/s] 97% 1221/1261 [08:58<00:19,  2.04it/s] 97% 1222/1261 [08:58<00:19,  2.01it/s] 97% 1223/1261 [08:59<00:18,  2.07it/s] 97% 1224/1261 [08:59<00:17,  2.13it/s] 97% 1225/1261 [09:00<00:16,  2.24it/s] 97% 1226/1261 [09:00<00:14,  2.39it/s] 97% 1227/1261 [09:00<00:13,  2.44it/s] 97% 1228/1261 [09:01<00:13,  2.48it/s] 97% 1229/1261 [09:01<00:13,  2.46it/s] 98% 1230/1261 [09:02<00:13,  2.36it/s] 98% 1231/1261 [09:02<00:12,  2.31it/s] 98% 1232/1261 [09:03<00:12,  2.33it/s] 98% 1233/1261 [09:03<00:12,  2.27it/s] 98% 1234/1261 [09:03<00:11,  2.27it/s] 98% 1235/1261 [09:04<00:11,  2.27it/s] 98% 1236/1261 [09:04<00:10,  2.32it/s] 98% 1237/1261 [09:05<00:10,  2.39it/s] 98% 1238/1261 [09:05<00:09,  2.41it/s] 98% 1239/1261 [09:06<00:09,  2.42it/s] 98% 1240/1261 [09:06<00:09,  2.26it/s] 98% 1241/1261 [09:07<00:09,  2.19it/s] 98% 1242/1261 [09:07<00:08,  2.19it/s] 99% 1243/1261 [09:07<00:08,  2.21it/s] 99% 1244/1261 [09:08<00:07,  2.28it/s] 99% 1245/1261 [09:08<00:07,  2.25it/s] 99% 1246/1261 [09:09<00:06,  2.21it/s] 99% 1247/1261 [09:09<00:06,  2.24it/s] 99% 1248/1261 [09:10<00:05,  2.18it/s] 99% 1249/1261 [09:10<00:05,  2.27it/s] 99% 1250/1261 [09:11<00:04,  2.24it/s] 99% 1251/1261 [09:11<00:04,  2.28it/s] 99% 1252/1261 [09:11<00:04,  2.22it/s] 99% 1253/1261 [09:12<00:03,  2.18it/s] 99% 1254/1261 [09:12<00:03,  2.23it/s]100% 1255/1261 [09:13<00:02,  2.26it/s]100% 1256/1261 [09:13<00:02,  2.17it/s]100% 1257/1261 [09:14<00:01,  2.17it/s]100% 1258/1261 [09:14<00:01,  2.28it/s]100% 1259/1261 [09:15<00:00,  2.34it/s]100% 1260/1261 [09:15<00:00,  2.38it/s]
+  : [MoviePy] Done.
+  : [MoviePy] >>>> Video ready: output_images/project_output.mp4
+
+
+
 * Discussion
 * Tips

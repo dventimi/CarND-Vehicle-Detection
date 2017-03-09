@@ -1,17 +1,10 @@
 from glob import glob
 from itertools import groupby, islice, zip_longest, cycle, filterfalse, chain
-from lesson_functions import *
 from moviepy.editor import VideoFileClip, VideoClip
-from mpl_toolkits.mplot3d import Axes3D
 from random import choice, sample
-from scipy.cluster.vq import kmeans,vq
 from scipy.ndimage.measurements import label
-from scipy.stats import gaussian_kde
-from skimage import color, exposure
 from skimage.feature import hog
-from sklearn.cross_validation import train_test_split
 from sklearn.model_selection import train_test_split
-from sklearn.neighbors.kde import KernelDensity
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
 import cv2
@@ -21,8 +14,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pdb
 import pickle
-import time
-import timeit
 
 # plt.ion()
 

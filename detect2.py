@@ -72,12 +72,12 @@ def get_classifier(X, y):
     svc.fit(X, y)
     return svc
 
-samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
-data = cycle(mirror(load(shuffle(samples))))
+# samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
+# data = cycle(mirror(load(shuffle(samples))))
 
-X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=0.2, random_state=np.random.randint(0, 100))
-classifier = get_classifier(X_train,y_train)
-print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
+# X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=0.2, random_state=np.random.randint(0, 100))
+# classifier = get_classifier(X_train,y_train)
+# print('Test Accuracy of SVC = ', round(classifier.score(X_test, y_test), 4))
 
 
 def get_window(img, x, y, z, horizon=0.5, width=2, height=2):
