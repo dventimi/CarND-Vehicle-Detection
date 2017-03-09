@@ -124,13 +124,22 @@ To set the stage, we were provided with two data archive files,
 [vehicles.zip](vehicles.zip) and [non-vehicles.zip](non-vehicles.zip), which as the names suggest
 contained images of vehicles and things that are not vehicles.
 
-Here is an example of a vehicle image.
+    img1 = mpimg.imread("vehicles/GTI_MiddleClose/image0000.png")
+    img2 = mpimg.imread("non-vehicles/GTI/image1.png")
+    fig = plt.figure()
+    plt.subplot(121)
+    plt.imshow(img1)
+    plt.title('Vehicle')
+    plt.subplot(122)
+    plt.imshow(img2)
+    plt.title('Non-Vehicle')
+    fig.tight_layout()
+    plt.savefig("output_images/car-examples.png")
 
-![img](vehicles/GTI_MiddleClose/image0000.png)
+Here is a side-by-side comparison of a vehicle image and a
+non-vehicle image, drawn from our training sample.
 
-And, here is an example of a non-vehicle image.
-
-![img](non-vehicles/GTI/image1.png)
+![img](output_images/car-examples.png)
 
 The size of each image is 64 x 64 pixels, and the vehicle and
 non-vehicle images are contained (after unpacking the archive files)

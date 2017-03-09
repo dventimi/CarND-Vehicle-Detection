@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Vehicle Detection Project</title>
-<!-- 2017-03-09 Thu 15:48 -->
+<!-- 2017-03-09 Thu 15:55 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="David A. Ventimiglia" />
@@ -378,23 +378,30 @@ To set the stage, we were provided with two data archive files,
 contained images of vehicles and things that are not vehicles.
 </p>
 
-<p>
-Here is an example of a vehicle image.
-</p>
+<div class="org-src-container">
 
-
-<div class="figure">
-<p><img src="vehicles/GTI_MiddleClose/image0000.png" alt="image0000.png" />
-</p>
+<pre class="src src-python"><span style="color: #fcaf3e;">img1</span> = mpimg.imread(<span style="color: #e9b96e;">"vehicles/GTI_MiddleClose/image0000.png"</span>)
+<span style="color: #fcaf3e;">img2</span> = mpimg.imread(<span style="color: #e9b96e;">"non-vehicles/GTI/image1.png"</span>)
+<span style="color: #fcaf3e;">fig</span> = plt.figure()
+plt.subplot(121)
+plt.imshow(img1)
+plt.title(<span style="color: #e9b96e;">'Vehicle'</span>)
+plt.subplot(122)
+plt.imshow(heat)
+plt.title(<span style="color: #e9b96e;">'Non-Vehicle'</span>)
+fig.tight_layout()
+plt.savefig(<span style="color: #e9b96e;">"output_images/car-examples.png"</span>)
+</pre>
 </div>
 
 <p>
-And, here is an example of a non-vehicle image.
+Here is a side-by-side comparison of a vehicle image and a
+non-vehicle image, drawn from our training sample.
 </p>
 
 
 <div class="figure">
-<p><img src="non-vehicles/GTI/image1.png" alt="image1.png" />
+<p><img src="output_images/car-examples.png" alt="car-examples.png" />
 </p>
 </div>
 

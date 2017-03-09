@@ -157,13 +157,33 @@
   [[file:vehicles.zip][vehicles.zip]] and [[file:non-vehicles.zip][non-vehicles.zip]], which as the names suggest
   contained images of vehicles and things that are not vehicles.
 
-  Here is an example of a vehicle image.
+  #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
+  img1 = mpimg.imread("vehicles/GTI_MiddleClose/image0000.png")
+  img2 = mpimg.imread("non-vehicles/GTI/image1.png")
+  fig = plt.figure()
+  plt.subplot(121)
+  plt.imshow(img1)
+  plt.title('Vehicle')
+  plt.subplot(122)
+  plt.imshow(img2)
+  plt.title('Non-Vehicle')
+  fig.tight_layout()
+  plt.savefig("output_images/car-examples.png")
+  #+END_SRC
 
-  [[file:vehicles/GTI_MiddleClose/image0000.png]]
+  #+RESULTS:
+  : 
+  : >>> >>> <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fb8834b70>
+  : <matplotlib.image.AxesImage object at 0x7f8fb8898438>
+  : <matplotlib.text.Text object at 0x7f8fb87f1780>
+  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fb8898828>
+  : <matplotlib.image.AxesImage object at 0x7f8fb87d72b0>
+  : <matplotlib.text.Text object at 0x7f8fb8816eb8>
 
-  And, here is an example of a non-vehicle image.
+  Here is a side-by-side comparison of a vehicle image and a
+  non-vehicle image, drawn from our training sample.
 
-  [[file:non-vehicles/GTI/image1.png]]
+  [[file:output_images/car-examples.png]]
 
   The size of each image is 64 x 64 pixels, and the vehicle and
   non-vehicle images are contained (after unpacking the archive files)
@@ -1573,13 +1593,13 @@
 
   #+RESULTS:
   : 
-  : ... ... ... ... >>> 2 cars found
-  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fb8059eb8>
-  : <matplotlib.image.AxesImage object at 0x7f8fbbd34978>
-  : <matplotlib.text.Text object at 0x7f8fbbd0f048>
-  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fbbd34f98>
-  : <matplotlib.image.AxesImage object at 0x7f8fbbd34f60>
-  : <matplotlib.text.Text object at 0x7f8fbbd60390>
+  : ... ... ... ... >>> >>> >>> >>> >>> >>> >>> >>> 2 cars found
+  : >>> >>> <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fb8519d30>
+  : <matplotlib.image.AxesImage object at 0x7f8fbbde4c50>
+  : <matplotlib.text.Text object at 0x7f8fb808f320>
+  : <matplotlib.axes._subplots.AxesSubplot object at 0x7f8fbbdea2b0>
+  : <matplotlib.image.AxesImage object at 0x7f8fbbdea278>
+  : <matplotlib.text.Text object at 0x7f8fbbe0af98>
 
   #+ATTR_HTML: :width 800px
   [[file:output_images/heatmaptest.png]]
