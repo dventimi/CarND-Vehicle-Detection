@@ -170,6 +170,8 @@ define a handful of useful utility functions.
     unchanged and then the entire sequence again but with the
     images flipped
 
+These are implemented as one-liners.
+
     feed = lambda pattern, y: ((f, y) for f in glob(pattern))
     shuffle = lambda l: sample(l, len(l))
     scale = lambda img,maxval=None: (img/np.max(img)*255).astype(np.uint8) if maxval==None else (img/maxval*255).astype(np.uint8)
@@ -381,6 +383,8 @@ above.
 -   **sph2cyl:** spherical-to-cylindrical
 -   **crt2sph:** Cartesian-to-spherical
 -   **sph2crt:** spherical-to-Cartesian
+
+These are implemented as one-liners
 
     crt2cyl = lambda x,y,z: (math.sqrt(x**2+y**2), math.atan2(y,x), z)
     cyl2crt = lambda rho,phi,z: (rho*math.cos(phi), rho*math.sin(phi), z)

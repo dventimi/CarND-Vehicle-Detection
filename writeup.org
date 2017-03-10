@@ -214,6 +214,8 @@
 	      unchanged and then the entire sequence again but with the
 	      images flipped
 
+  These are implemented as one-liners.
+
   #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
   feed = lambda pattern, y: ((f, y) for f in glob(pattern))
   shuffle = lambda l: sample(l, len(l))
@@ -387,6 +389,8 @@
   - sph2cyl :: spherical-to-cylindrical
   - crt2sph :: Cartesian-to-spherical
   - sph2crt :: spherical-to-Cartesian
+
+  These are implemented as one-liners
 
   #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
   crt2cyl = lambda x,y,z: (math.sqrt(x**2+y**2), math.atan2(y,x), z)
