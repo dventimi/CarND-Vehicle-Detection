@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Vehicle Detection Project</title>
-<!-- 2017-03-09 Thu 15:55 -->
+<!-- 2017-03-09 Thu 15:59 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="David A. Ventimiglia" />
@@ -387,7 +387,7 @@ plt.subplot(121)
 plt.imshow(img1)
 plt.title(<span style="color: #e9b96e;">'Vehicle'</span>)
 plt.subplot(122)
-plt.imshow(heat)
+plt.imshow(img2)
 plt.title(<span style="color: #e9b96e;">'Non-Vehicle'</span>)
 fig.tight_layout()
 plt.savefig(<span style="color: #e9b96e;">"output_images/car-examples.png"</span>)
@@ -1435,6 +1435,10 @@ to a grid window on the image plane.
 above, rather than laid out in a regular array.
 </li>
 </ol>
+
+<p>
+This is implemented in the <code>random_scan4</code> function.
+</p>
 
 <div class="org-src-container">
 

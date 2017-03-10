@@ -1395,6 +1395,8 @@
   2. Window locations are randomly drawn from the 3D volume described
      above, rather than laid out in a regular array.
 
+  This is implemented in the ~random_scan4~ function.
+
   #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
   def random_scan4(img,size,num=100,width=25,left=-12.5):
       grid = np.random.rand(num,3)
