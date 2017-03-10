@@ -476,6 +476,8 @@ handful of windows receding into the distance.
 
 <iframe width="800" height="450" src="https://www.youtube.com/embed/lqp9rOSPVrc" frameborder="0" allowfullscreen></iframe>
 
+[zooming window video](https://www.youtube.com/embed/lqp9rOSPVrc)
+
 This is just for visualization.  For vehicle detection, a denser
 grid should be used, and we raster the windows horizontally as they
 ratchet down-range.  We also confine the windows to a horizontal
@@ -529,6 +531,8 @@ and then animate them.
     clip.write_videofile("output_images/sparse-scan.mp4", fps=25)
 
 <iframe width="800" height="450" src="https://www.youtube.com/embed/Vn1HxPRd2W0" frameborder="0" allowfullscreen></iframe>
+
+[sparse grid animation](https://www.youtube.com/embed/Vn1HxPRd2W0)
 
 We can also define a "dense grid" with more windows, scanning the
 roadway with finer resolution in the \(x\) and \(z\) directions.  We
@@ -1270,6 +1274,8 @@ two.
 
 <iframe width="800" height="450" src="https://www.youtube.com/embed/McviDE-LWLA" frameborder="0" allowfullscreen></iframe>
 
+[test video](https://www.youtube.com/embed/McviDE-LWLA)
+
 Next, we process the main project video in "extended mode", to
 include the smaller sub-windows the the animated grid windows and
 evolving heat map.
@@ -1294,6 +1300,8 @@ parameters might banish them.
 
 <iframe width="800" height="450" src="https://www.youtube.com/embed/yGHN0OlBVRU" frameborder="0" allowfullscreen></iframe>
 
+[extended project video](https://www.youtube.com/embed/yGHN0OlBVRU)
+
 Finally, we repeat processing for the main project video, but not in
 extended mode.  This mainly was so that I could get a sense of the
 difference in processing times.  In fact, it cuts the processing
@@ -1310,6 +1318,8 @@ This video is largely the same as the previous one, save for the
 fact that the smaller sub-windows are not present
 
 <iframe width="800" height="450" src="https://www.youtube.com/embed/I6_oEk4CKBs" frameborder="0" allowfullscreen></iframe>
+
+[project video](https://www.youtube.com/embed/I6_oEk4CKBs)
 
 # Discussion
 

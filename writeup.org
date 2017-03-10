@@ -908,6 +908,8 @@
 
   #+HTML: <iframe width="800" height="450" src="https://www.youtube.com/embed/lqp9rOSPVrc" frameborder="0" allowfullscreen></iframe>
 
+  [[https://www.youtube.com/embed/lqp9rOSPVrc][zooming window video]]
+
   This is just for visualization.  For vehicle detection, a denser
   grid should be used, and we raster the windows horizontally as they
   ratchet down-range.  We also confine the windows to a horizontal
@@ -989,6 +991,8 @@
   : [MoviePy] >>>> Video ready: output_images/sparse-scan.mp4
 
   #+HTML: <iframe width="800" height="450" src="https://www.youtube.com/embed/Vn1HxPRd2W0" frameborder="0" allowfullscreen></iframe>
+
+  [[https://www.youtube.com/embed/Vn1HxPRd2W0][sparse grid animation]]
 
   We can also define a "dense grid" with more windows, scanning the
   roadway with finer resolution in the $x$ and $z$ directions.  We
@@ -1829,6 +1833,8 @@
 
   #+HTML: <iframe width="800" height="450" src="https://www.youtube.com/embed/McviDE-LWLA" frameborder="0" allowfullscreen></iframe>
 
+  [[https://www.youtube.com/embed/McviDE-LWLA][test video]]
+
   Next, we process the main project video in "extended mode", to
   include the smaller sub-windows the the animated grid windows and
   evolving heat map.
@@ -1858,6 +1864,8 @@
 
   #+HTML: <iframe width="800" height="450" src="https://www.youtube.com/embed/yGHN0OlBVRU" frameborder="0" allowfullscreen></iframe>
 
+  [[https://www.youtube.com/embed/yGHN0OlBVRU][extended project video]]
+
   Finally, we repeat processing for the main project video, but not in
   extended mode.  This mainly was so that I could get a sense of the
   difference in processing times.  In fact, it cuts the processing
@@ -1876,6 +1884,8 @@
   fact that the smaller sub-windows are not present
 
   #+HTML: <iframe width="800" height="450" src="https://www.youtube.com/embed/I6_oEk4CKBs" frameborder="0" allowfullscreen></iframe>
+
+  [[https://www.youtube.com/embed/I6_oEk4CKBs][project video]]
 
 * Discussion
 
