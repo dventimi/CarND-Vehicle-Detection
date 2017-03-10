@@ -293,8 +293,8 @@
   #+BEGIN_SRC python -r :results output :session :tangle detect_vehicles.py :comments org :exports code
   def get_classifier(reload=False,test_size=0.2):
       if reload:
-	  samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
-	  data = cycle(mirror(load(shuffle(samples))))
+	  samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))  #(ref:compose1)
+	  data = cycle(mirror(load(shuffle(samples))))                                        #(ref:compose2)
 	  X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=test_size, random_state=np.random.randint(0, 100))
 	  svc = LinearSVC()
 	  svc.fit(X_train, y_train)

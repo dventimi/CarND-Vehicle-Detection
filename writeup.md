@@ -297,8 +297,8 @@ new one.
 
     def get_classifier(reload=False,test_size=0.2):
         if reload:
-            samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))
-            data = cycle(mirror(load(shuffle(samples))))
+            samples = list(chain(feed("vehicles/**/*.png",1),feed("non-vehicles/**/*.png",0)))  #
+            data = cycle(mirror(load(shuffle(samples))))                                        #
             X_train,X_test,y_train,y_test = train_test_split(*zip(*((extract_features(s[0]), s[1]) for s in islice(data, len(samples)))), test_size=test_size, random_state=np.random.randint(0, 100))
             svc = LinearSVC()
             svc.fit(X_train, y_train)
@@ -853,6 +853,8 @@ The main differences are:
     to a grid window on the image plane.
 2.  Window locations are randomly drawn from the 3D volume described
     above, rather than laid out in a regular array.
+
+This is implemented in the `random_scan4` function.
 
     def random_scan4(img,size,num=100,width=25,left=-12.5):
         grid = np.random.rand(num,3)

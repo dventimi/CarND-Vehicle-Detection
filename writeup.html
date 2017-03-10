@@ -4,7 +4,7 @@
 <html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
 <head>
 <title>Vehicle Detection Project</title>
-<!-- 2017-03-09 Thu 15:59 -->
+<!-- 2017-03-09 Thu 16:05 -->
 <meta  http-equiv="Content-Type" content="text/html;charset=utf-8" />
 <meta  name="generator" content="Org-mode" />
 <meta  name="author" content="David A. Ventimiglia" />
@@ -584,8 +584,8 @@ new one.
 
 <pre class="src src-python"><span style="color: #b4fa70;">def</span> <span style="color: #fce94f;">get_classifier</span>(<span style="color: #e090d7;">reload</span>=<span style="color: #e9b2e3;">False</span>,test_size=0.2):
     <span style="color: #b4fa70;">if</span> <span style="color: #e090d7;">reload</span>:
-        <span style="color: #fcaf3e;">samples</span> = <span style="color: #e090d7;">list</span>(chain(feed(<span style="color: #e9b96e;">"vehicles/**/*.png"</span>,1),feed(<span style="color: #e9b96e;">"non-vehicles/**/*.png"</span>,0)))
-        <span style="color: #fcaf3e;">data</span> = cycle(mirror(load(shuffle(samples))))
+<span id="coderef-compose1" class="coderef-off">        <span style="color: #fcaf3e;">samples</span> = <span style="color: #e090d7;">list</span>(chain(feed(<span style="color: #e9b96e;">"vehicles/**/*.png"</span>,1),feed(<span style="color: #e9b96e;">"non-vehicles/**/*.png"</span>,0)))  <span style="color: #73d216;">#</span></span>
+<span id="coderef-compose2" class="coderef-off">        <span style="color: #fcaf3e;">data</span> = cycle(mirror(load(shuffle(samples))))                                        <span style="color: #73d216;">#</span></span>
         <span style="color: #fcaf3e;">X_train</span>,<span style="color: #fcaf3e;">X_test</span>,<span style="color: #fcaf3e;">y_train</span>,<span style="color: #fcaf3e;">y_test</span> = train_test_split(*<span style="color: #e090d7;">zip</span>(*((extract_features(s[0]), s[1]) <span style="color: #b4fa70;">for</span> s <span style="color: #b4fa70;">in</span> islice(data, <span style="color: #e090d7;">len</span>(samples)))), test_size=test_size, random_state=np.random.randint(0, 100))
         <span style="color: #fcaf3e;">svc</span> = LinearSVC()
         svc.fit(X_train, y_train)
